@@ -48,3 +48,13 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+
+## About the app
+
+Digital Assassins is an app version of the game Assassin.
+Assassin is usually played in a group of people that spend lots of time around each other, such as on a college campus or at high school.
+The goal of the game is to eliminate all the other players. Each player is secretly assigned another player to "assassinate". Methods of "assassination" vary, but can include drawing on the target with a marker, slipping an item into the target's pocket, or shooting the target with a water gun.
+When a person is eliminated, he is out of the game and his target is given to the person who assassinated him. Each person only has one target at a time.
+Slowly the circle closes, until there are only two, each having the other as his target. The person that "assassinates" the other first is the winner.
+The Digital Assassins app is meant to be a digital version of the game. One person per game of Assassin will be the host. Players will join the host's game lobby by entering a code. The host will be able to start the game.
