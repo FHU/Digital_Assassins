@@ -84,7 +84,7 @@ export default function HomePage() {
       <View style={styles.buttonsContainer}>
         <TouchableOpacity
           style={[styles.button, styles.hostButton]}
-          onPress={() => router.push("/host")}
+          onPress={() => router.push("/host_page/host")}
           activeOpacity={0.8}
         >
           <Text style={[styles.buttonText, styles.hostButtonText]}>Host</Text>
