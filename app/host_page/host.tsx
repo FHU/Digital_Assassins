@@ -1,8 +1,11 @@
-import { Text, View, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
-import { useRouter } from "expo-router";
 import { useThemeColor } from "@/hooks/useThemeColor";
-import LobbyName from "./lobby_name";
+import { createLobby, getCurrentActiveLobby, Lobby } from "@/services/LobbyStore";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import LobbyCode from "./lobby_code";
+import LobbyName from "./lobby_name";
 import ParticipantList from "./participant_list";
 
 export default function HostScreen() {
@@ -11,12 +14,24 @@ export default function HostScreen() {
   const textColor = useThemeColor({}, "text");
   const tintColor = useThemeColor({}, "tint");
 
-  const fakeParticipants = [
-    "Tiger42X",
-    "Eagle89K",
-    "Panda55M",
-    "Dolphin21L",
-  ];
+  const [lobby, setLobby] = useState<Lobby | null>(null);
+
+  // Initialize lobby on mount
+  useFocusEffect(
+    useCallback(() => {
+      // Check if there's already an active lobby
+      const existingLobby = getCurrentActiveLobby();
+      if (existingLobby) {
+        setLobby(existingLobby);
+      } else {
+        // Create a new lobby
+        const newLobby = createLobby("Host", "Game Night");
+        setLobby(newLobby);
+      }
+    }, [])
+  );
+
+  const hostParticipants = lobby?.participants.map((p) => p.username) || [];
 
   const styles = StyleSheet.create({
     container: {
@@ -62,7 +77,7 @@ export default function HostScreen() {
       alignItems: "center",
     },
     buttonText: {
-      color: "#fff",
+      color: "black",
       fontSize: 16,
       fontWeight: "600",
     },
@@ -74,24 +89,33 @@ export default function HostScreen() {
       alignItems: "center",
     },
     backButtonText: {
-      color: "#fff",
+      color: "black",
       fontSize: 16,
       fontWeight: "600",
     },
   });
 
+  // Don't render until lobby is loaded
+  if (!lobby) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <Text style={{ color: textColor }}>Initializing lobby...</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>Host Match</Text>
 
         <View style={styles.lobbyInfoContainer}>
-          <LobbyName name="Epic Game Night" />
-          <LobbyCode code="ABC123XYZ9" />
+          <LobbyName name={lobby.name} />
+          <LobbyCode code={lobby.code} />
         </View>
 
         <View style={styles.participantListWrapper}>
-          <ParticipantList initialParticipants={fakeParticipants} />
+          <ParticipantList initialParticipants={hostParticipants} />
         </View>
       </ScrollView>
 
@@ -105,11 +129,11 @@ export default function HostScreen() {
 
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => router.push("/")}
         >
           <Text style={styles.backButtonText}>Back Home</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
