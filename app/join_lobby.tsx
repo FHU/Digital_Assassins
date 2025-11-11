@@ -1,19 +1,16 @@
-import React, { useState } from "react";
 import { useThemeColor } from "@/hooks/useThemeColor";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { addParticipantToLobby, getLobbyByCode } from "@/services/LobbyStore";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useState } from "react";
 import {
+  Alert,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
-  ScrollView,
-  Alert,
-  TextInput,
 } from "react-native";
-import {
-  getLobbyByCode,
-  addParticipantToLobby,
-} from "@/services/LobbyStore";
 
 export default function JoinLobbyScreen() {
   const router = useRouter();
@@ -27,70 +24,6 @@ export default function JoinLobbyScreen() {
   const [username, setUsername] = useState("");
   const [isJoining, setIsJoining] = useState(false);
 
-  if (!code) {
-    return (
-      <View style={[styles.container, { backgroundColor }]}>
-        <Text style={[styles.errorText, { color: dangerColor }]}>
-          Invalid lobby code
-        </Text>
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: tintColor }]}
-          onPress={() => router.back()}
-        >
-          <Text style={[styles.buttonText, { color: backgroundColor }]}>
-            Go Back
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  const lobby = getLobbyByCode(code);
-
-  if (!lobby) {
-    return (
-      <View style={[styles.container, { backgroundColor }]}>
-        <Text style={[styles.errorText, { color: dangerColor }]}>
-          Lobby not found
-        </Text>
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: tintColor }]}
-          onPress={() => router.push("/join")}
-        >
-          <Text style={[styles.buttonText, { color: backgroundColor }]}>
-            Try Another Code
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  const handleJoin = () => {
-    if (!username.trim()) {
-      Alert.alert("Username Required", "Please enter a username to join.");
-      return;
-    }
-
-    setIsJoining(true);
-
-    // Simulate network delay
-    setTimeout(() => {
-      addParticipantToLobby(code, username.trim());
-      setIsJoining(false);
-
-      Alert.alert("Successfully Joined!", "Waiting for the game to start...", [
-        {
-          text: "OK",
-          onPress: () => {
-            // For now, navigate back to home
-            // In the future, this could navigate to a player lobby view
-            router.push("/");
-          },
-        },
-      ]);
-    }, 500);
-  };
-
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -99,11 +32,13 @@ export default function JoinLobbyScreen() {
       paddingHorizontal: 20,
     },
     card: {
-      backgroundColor: tintColor,
+      backgroundColor: tintColor + "15",
       borderRadius: 12,
       padding: 24,
       width: "100%",
       gap: 20,
+      borderWidth: 1,
+      borderColor: tintColor + "33",
     },
     title: {
       fontSize: 28,
@@ -179,13 +114,75 @@ export default function JoinLobbyScreen() {
     },
   });
 
+  if (!code) {
+    return (
+      <View style={[styles.container, { backgroundColor }]}>
+        <Text style={[styles.errorText, { color: dangerColor }]}>
+          Invalid lobby code
+        </Text>
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: tintColor }]}
+          onPress={() => router.back()}
+        >
+          <Text style={[styles.buttonText, { color: "white" }]}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const lobby = getLobbyByCode(code);
+
+  if (!lobby) {
+    return (
+      <View style={[styles.container, { backgroundColor }]}>
+        <Text style={[styles.errorText, { color: dangerColor }]}>
+          Lobby not found
+        </Text>
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: tintColor }]}
+          onPress={() => router.push("/join")}
+        >
+          <Text style={[styles.buttonText, { color: "white" }]}>
+            Try Another Code
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const handleJoin = () => {
+    if (!username.trim()) {
+      Alert.alert("Username Required", "Please enter a username to join.");
+      return;
+    }
+
+    setIsJoining(true);
+
+    // Simulate network delay
+    setTimeout(() => {
+      addParticipantToLobby(code, username.trim());
+      setIsJoining(false);
+
+      Alert.alert("Successfully Joined!", "Waiting for the game to start...", [
+        {
+          text: "OK",
+          onPress: () => {
+            // For now, navigate back to home
+            // In the future, this could navigate to a player lobby view
+            router.push("/");
+          },
+        },
+      ]);
+    }, 500);
+  };
+
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.card, { backgroundColor: tintColor }]}>
+        <View style={styles.card}>
           <Text style={styles.title}>Join Lobby</Text>
 
           <View>
@@ -207,9 +204,7 @@ export default function JoinLobbyScreen() {
               editable={!isJoining}
               autoCapitalize="words"
             />
-            <Text style={styles.info}>
-              {username.length}/20 characters
-            </Text>
+            <Text style={styles.info}>{username.length}/20 characters</Text>
           </View>
 
           <View style={styles.buttonContainer}>
@@ -218,7 +213,7 @@ export default function JoinLobbyScreen() {
               onPress={handleJoin}
               disabled={isJoining || !username.trim()}
             >
-              <Text style={[styles.buttonText, { color: backgroundColor }]}>
+              <Text style={[styles.buttonText, { color: "white" }]}>
                 {isJoining ? "Joining..." : "Join Game"}
               </Text>
             </TouchableOpacity>
@@ -228,14 +223,15 @@ export default function JoinLobbyScreen() {
               onPress={() => router.back()}
               disabled={isJoining}
             >
-              <Text style={[styles.buttonText, { color: backgroundColor }]}>
+              <Text style={[styles.buttonText, { color: "white" }]}>
                 Cancel
               </Text>
             </TouchableOpacity>
           </View>
 
           <Text style={styles.info}>
-            {lobby.participants.length} player{lobby.participants.length !== 1 ? "s" : ""} in lobby
+            {lobby.participants.length} player
+            {lobby.participants.length !== 1 ? "s" : ""} in lobby
           </Text>
         </View>
       </ScrollView>
