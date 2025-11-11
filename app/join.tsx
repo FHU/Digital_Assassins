@@ -1,5 +1,6 @@
 import JoinCodeInput from "@/components/JoinCodeInput";
 import { useThemeColor } from "@/hooks/useThemeColor";
+import { useBluetooth } from "@/hooks/useBluetooth";
 import { getLobbyByCode } from "@/services/LobbyStore";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -17,11 +18,42 @@ export default function JoinScreen() {
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
   const tintColor = useThemeColor({}, "tint");
+  const { isBluetoothEnabled, enableBluetooth } = useBluetooth();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [currentCode, setCurrentCode] = useState<string>("");
+
+  const handleBluetoothEnable = async () => {
+    const success = await enableBluetooth();
+    if (success && currentCode) {
+      // Retry the code submission after enabling Bluetooth
+      handleCodeSubmit(currentCode);
+    }
+  };
 
   const handleCodeSubmit = async (code: string) => {
+    setCurrentCode(code);
     setIsLoading(true);
+
+    // Check if Bluetooth is enabled first
+    if (!isBluetoothEnabled) {
+      setIsLoading(false);
+      Alert.alert(
+        "Bluetooth Required",
+        "Bluetooth must be enabled to join a match",
+        [
+          {
+            text: "Enable Bluetooth",
+            onPress: handleBluetoothEnable,
+          },
+          {
+            text: "Cancel",
+            onPress: () => setCurrentCode(""),
+          },
+        ]
+      );
+      return;
+    }
 
     // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 500));
