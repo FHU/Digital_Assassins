@@ -6,28 +6,36 @@ interface Props {
 }
 
 export default function LobbyName({ name }: Props) {
-  const textColor = useThemeColor({}, "text");
-  const backgroundColor = useThemeColor({}, "background");
+  const primaryColor = useThemeColor({}, "primary");
 
   const styles = StyleSheet.create({
     container: {
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      backgroundColor,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: textColor,
+      paddingVertical: 20,
+      paddingHorizontal: 20,
+      backgroundColor: primaryColor,
+      borderRadius: 12,
+      alignItems: "center",
+      gap: 8,
+    },
+    label: {
+      fontSize: 13,
+      fontWeight: "500",
+      color: "#fff",
+      opacity: 0.8,
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
     },
     text: {
-      fontSize: 18,
-      fontWeight: "600",
-      color: textColor,
+      fontSize: 28,
+      fontWeight: "700",
+      color: "#fff",
       textAlign: "center",
     },
   });
 
   return (
     <View style={styles.container}>
+      <Text style={styles.label}>Lobby Name</Text>
       <Text style={styles.text}>{name}</Text>
     </View>
   );
