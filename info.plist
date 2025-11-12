@@ -1,0 +1,12 @@
+<key>NSBluetoothAlwaysUsageDescription</key>
+<string>Digital Assassins needs Bluetooth to detect nearby players for local multiplayer gameplay.</string>
+
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>Digital Assassins uses your location to determine if you're near another player for gameplay.</string>
+
+<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+<string>Digital Assassins uses location in the background to maintain multiplayer proximity when the app is running in the background.</string>
+
+<!-- Optional older key -->
+<key>NSBluetoothPeripheralUsageDescription</key>
+<string>Required to connect to nearby devices for game functionality.</string>
