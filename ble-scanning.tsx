@@ -37,7 +37,7 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [nearbyDevices, setNearbyDevices] = useState<Record<string, {device: Device, distance?: number, rssi?: number}>>({});
   const [location, setLocation] = useState<{lat: number, lon: number} | null>(null);
-  const pressTimer = useRef<number | null>(null);
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const targetIdRef = useRef<string | null>(null); // id of target to kill (set via game logic)
 
   useEffect(() => {
