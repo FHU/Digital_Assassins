@@ -1,9 +1,10 @@
+/* 
 // App.tsx
 import { useEffect, useRef, useState } from 'react';
 import { Alert, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BleManager, Device } from 'react-native-ble-plx';
-import * as Geolocation from 'react-native-geolocation-service';
-import { PERMISSIONS, RESULTS, check, openSettings, request } from 'react-native-permissions';
+///import * as Geolocation from 'react-native-geolocation-service';
+//import { RESULTS, check, openSettings, request } from 'react-native-permissions';
 
 // ---------- CONFIG ----------
 const BLE_SCAN_SERVICE_UUID = null; // null = scan for all; or use a specific UUID you control
@@ -210,3 +211,4 @@ const styles = StyleSheet.create({
   killButton:{backgroundColor:'#b22222', paddingVertical:20, paddingHorizontal:30, borderRadius:10},
   killText:{color:'#fff', fontWeight:'700'}
 });
+*/

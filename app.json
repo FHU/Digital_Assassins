@@ -11,9 +11,11 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to find and connect with nearby players in the game",
         "NSBluetoothPeripheralUsageDescription": "We need Bluetooth to connect with other players in the game",
         "NSBluetoothCentralUsageDescription": "We need Bluetooth to connect with other players in the game"
-      }
+      },
+      "bundleIdentifier": "com.anonymous.Digital-Assassins"
     },
     "android": {
       "adaptiveIcon": {
@@ -28,7 +30,8 @@
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_SCAN",
-        "android.permission.BLUETOOTH_CONNECT"
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -47,6 +50,14 @@
           "dark": {
             "backgroundColor": "#000000"
           }
+        }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": true,
+          "modes": ["peripheral", "central"],
+          "bluetoothAlwaysUsageDescription": "This app uses Bluetooth to find and connect with nearby players in the game"
         }
       ]
     ],

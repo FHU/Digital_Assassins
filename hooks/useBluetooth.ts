@@ -1,7 +1,6 @@
 import { BleManager } from "react-native-ble-plx";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, Linking, Alert } from "react-native";
-import * as Permissions from "expo-permissions";
+import { Platform, Linking, Alert, PermissionsAndroid } from "react-native";
 
 export function useBluetooth() {
   const bleManagerRef = useRef<BleManager | null>(null);
@@ -39,11 +38,40 @@ export function useBluetooth() {
         return state === "PoweredOn";
       } else if (Platform.OS === "android") {
         // Request necessary Android permissions
-        const { status } = await Permissions.askAsync(
-          Permissions.BLUETOOTH_SCAN,
-          Permissions.BLUETOOTH_CONNECT
+        // Android 12+ (API 31+) requires BLUETOOTH_SCAN and BLUETOOTH_CONNECT
+        const scanPermission = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+          {
+            title: "Bluetooth Scan Permission",
+            message: "This app needs Bluetooth scan permission to find nearby devices",
+            buttonPositive: "OK",
+          }
         );
-        return status === "granted";
+
+        const connectPermission = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+          {
+            title: "Bluetooth Connect Permission",
+            message: "This app needs Bluetooth connect permission to connect to devices",
+            buttonPositive: "OK",
+          }
+        );
+
+        // Also request location permission which is needed for Bluetooth on some devices
+        const locationPermission = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: "Location Permission",
+            message: "This app needs location permission for Bluetooth functionality",
+            buttonPositive: "OK",
+          }
+        );
+
+        return (
+          scanPermission === PermissionsAndroid.RESULTS.GRANTED &&
+          connectPermission === PermissionsAndroid.RESULTS.GRANTED &&
+          locationPermission === PermissionsAndroid.RESULTS.GRANTED
+        );
       }
       return true;
     } catch (error) {
