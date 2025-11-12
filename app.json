@@ -32,7 +32,8 @@
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.ACCESS_FINE_LOCATION"
-      ]
+      ],
+      "package": "com.anonymous.DigitalAssassins"
     },
     "web": {
       "output": "static",
@@ -56,7 +57,10 @@
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": true,
-          "modes": ["peripheral", "central"],
+          "modes": [
+            "peripheral",
+            "central"
+          ],
           "bluetoothAlwaysUsageDescription": "This app uses Bluetooth to find and connect with nearby players in the game"
         }
       ]
