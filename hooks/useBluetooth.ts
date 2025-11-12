@@ -32,10 +32,21 @@ export function useBluetooth() {
     try {
       if (Platform.OS === "ios") {
         // iOS handles permissions through NSBluetoothPeripheralUsageDescription
-        // We just need to request the state
-        const state = await bleManagerRef.current?.state();
+        // The permission dialog appears when we first access BLE manager
+        if (!bleManagerRef.current) {
+          bleManagerRef.current = new BleManager();
+        }
+
+        // This will trigger the permission prompt on first access
+        const state = await bleManagerRef.current.state();
         setIsBluetoothEnabled(state === "PoweredOn");
-        return state === "PoweredOn";
+
+        if (state !== "PoweredOn") {
+          // Bluetooth is not enabled, user needs to enable it in settings
+          return false;
+        }
+
+        return true;
       } else if (Platform.OS === "android") {
         // Request necessary Android permissions
         // Android 12+ (API 31+) requires BLUETOOTH_SCAN and BLUETOOTH_CONNECT
@@ -85,51 +96,64 @@ export function useBluetooth() {
       const permissionGranted = await requestBluetoothPermissions();
 
       if (!permissionGranted) {
-        Alert.alert(
-          "Permission Denied",
-          "Bluetooth permissions are required to play"
-        );
+        if (Platform.OS === "android") {
+          Alert.alert(
+            "Permission Denied",
+            "Bluetooth permissions are required to play. Please grant permissions in settings.",
+            [
+              {
+                text: "Open Settings",
+                onPress: () => Linking.openSettings(),
+              },
+              {
+                text: "Cancel",
+                style: "cancel",
+              },
+            ]
+          );
+        } else if (Platform.OS === "ios") {
+          // On iOS, if permission wasn't granted or Bluetooth is off
+          Alert.alert(
+            "Enable Bluetooth",
+            "Please enable Bluetooth in your device settings to continue.",
+            [
+              {
+                text: "Go to Settings",
+                onPress: () => Linking.openSettings(),
+              },
+              {
+                text: "Cancel",
+                style: "cancel",
+              },
+            ]
+          );
+        }
         return false;
       }
 
       if (Platform.OS === "android") {
-        // On Android, we can show the Bluetooth enable request
+        // On Android, we can try to enable Bluetooth programmatically
         if (bleManagerRef.current) {
           try {
             await bleManagerRef.current.enable();
             setIsBluetoothEnabled(true);
             return true;
-          } catch (error) {
+          } catch {
             // If enable fails, show user settings
             showBluetoothSettings();
             return false;
           }
         }
-      } else if (Platform.OS === "ios") {
-        // On iOS, we can't enable Bluetooth programmatically
-        // Show a message directing user to settings
-        Alert.alert(
-          "Enable Bluetooth",
-          "Please enable Bluetooth in your device settings to continue.",
-          [
-            {
-              text: "Go to Settings",
-              onPress: () => {
-                Linking.openSettings();
-              },
-            },
-            {
-              text: "Cancel",
-              onPress: () => {},
-            },
-          ]
-        );
-        return false;
       }
 
+      // On iOS, if we got here, Bluetooth is already enabled
       return true;
     } catch (error) {
       console.error("Error enabling Bluetooth:", error);
+      Alert.alert(
+        "Error",
+        "Failed to enable Bluetooth. Please try again."
+      );
       return false;
     }
   }, []);
