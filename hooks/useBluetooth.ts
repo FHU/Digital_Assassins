@@ -1,6 +1,6 @@
-import { BleManager } from "react-native-ble-plx";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, Linking, Alert, PermissionsAndroid } from "react-native";
+import { Alert, Linking, PermissionsAndroid, Platform } from "react-native";
+import { BleManager } from "react-native-ble-plx";
 
 export function useBluetooth() {
   const bleManagerRef = useRef<BleManager | null>(null);

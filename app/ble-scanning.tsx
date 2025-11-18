@@ -1,130 +1,208 @@
-/* 
-// App.tsx
+import { useThemeColor } from '@/hooks/useThemeColor';
+import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { BleManager, Device } from 'react-native-ble-plx';
-///import * as Geolocation from 'react-native-geolocation-service';
-//import { RESULTS, check, openSettings, request } from 'react-native-permissions';
+import { Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BleManager, Device, State } from 'react-native-ble-plx';
 
 // ---------- CONFIG ----------
-const BLE_SCAN_SERVICE_UUID = null; // null = scan for all; or use a specific UUID you control
-const TX_POWER_DEFAULT = -59; // assumed tx power (calibrate in testing)
-const ENV_FACTOR = 2; // 2 = open space, 3..4 indoor; tweak by testing
+const BLE_SCAN_SERVICE_UUID = null; // null = scan for all devices
+const TX_POWER_DEFAULT = -59; // assumed tx power at 1 meter (calibrate in testing)
+const ENV_FACTOR = 2; // 2 = open space, 3-4 = indoor (tune based on environment)
 const KILL_RADIUS_METERS = 9.144; // 30 feet in meters
+const PRESS_HOLD_DURATION = 1500; // milliseconds to hold for kill
+const DEVICE_TIMEOUT = 5000; // consider device gone if not seen in 5 seconds
 // ----------------------------
 
 const manager = new BleManager();
 
-function rssiToDistance(rssi: number, txPower = TX_POWER_DEFAULT, n = ENV_FACTOR) {
-  // d = 10 ^ ((txPower - rssi) / (10 * n))
+/**
+ * Calculate estimated distance from RSSI using path loss formula
+ * d = 10 ^ ((txPower - rssi) / (10 * n))
+ */
+function rssiToDistance(rssi: number, txPower = TX_POWER_DEFAULT, n = ENV_FACTOR): number {
   const ratio = (txPower - rssi) / (10 * n);
   return Math.pow(10, ratio);
 }
 
-function haversineDistMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371000; // meters
-  const toRad = (v: number) => (v * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+interface DeviceInfo {
+  device: Device;
+  distance?: number;
+  rssi?: number;
+  lastSeen: number;
 }
 
-export default function App() {
+export default function BLEScanning() {
+  const [bleState, setBleState] = useState<State>(State.Unknown);
   const [scanning, setScanning] = useState(false);
-  const [nearbyDevices, setNearbyDevices] = useState<Record<string, {device: Device, distance?: number, rssi?: number}>>({});
-  const [location, setLocation] = useState<{lat: number, lon: number} | null>(null);
-  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const targetIdRef = useRef<string | null>(null); // id of target to kill (set via game logic)
+  const [nearbyDevices, setNearbyDevices] = useState<Record<string, DeviceInfo>>({});
+  const [isPressed, setIsPressed] = useState(false);
+  const [targetInRange, setTargetInRange] = useState(false);
 
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressProgress = useRef(new Animated.Value(0)).current;
+  const targetIdRef = useRef<string | null>(null); // would be set from game state/server
+
+  // Theme colors
+  const backgroundColor = useThemeColor({}, 'background');
+  const textColor = useThemeColor({}, 'text');
+  const primaryColor = useThemeColor({}, 'primary');
+  const dangerColor = useThemeColor({}, 'danger');
+
+  // Initialize BLE manager
   useEffect(() => {
-    // cleanup on unmount
+    const startScan = () => {
+      if (scanning) return;
+      setScanning(true);
+
+      manager.startDeviceScan(
+        BLE_SCAN_SERVICE_UUID ? [BLE_SCAN_SERVICE_UUID] : null,
+        { allowDuplicates: true },
+        (error, scannedDevice) => {
+          if (error) {
+            console.warn('BLE scan error:', error.message);
+            return;
+          }
+
+          if (!scannedDevice) return;
+
+          const id = scannedDevice.id;
+          const rssi = scannedDevice.rssi ?? undefined;
+          const distance = typeof rssi === 'number' ? rssiToDistance(rssi) : undefined;
+
+          setNearbyDevices((prev) => ({
+            ...prev,
+            [id]: {
+              device: scannedDevice,
+              distance,
+              rssi,
+              lastSeen: Date.now(),
+            },
+          }));
+        }
+      );
+    };
+
+    const subscription = manager.onStateChange((state) => {
+      setBleState(state);
+      if (state === State.PoweredOn) {
+        startScan();
+      }
+    }, true);
+
     return () => {
+      subscription.remove();
+      manager.stopDeviceScan();
       manager.destroy();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Clean up stale devices
   useEffect(() => {
-    (async () => {
-      const ok = await ensurePermissions();
-      if (ok) startBLEScan();
-    })();
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setNearbyDevices((prev) => {
+        const updated = { ...prev };
+        let hasChanges = false;
+
+        Object.keys(updated).forEach((id) => {
+          if (now - updated[id].lastSeen > DEVICE_TIMEOUT) {
+            delete updated[id];
+            hasChanges = true;
+          }
+        });
+
+        return hasChanges ? updated : prev;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  async function ensurePermissions(): Promise<boolean> {
-    // Bluetooth permission (iOS)
-    // NOTE: some versions of react-native-permissions expose `BLUETOOTH` instead
-    // of `BLUETOOTH_PERIPHERAL`. Use the library's available key for iOS.
-    let btStatus = await check(PERMISSIONS.IOS.BLUETOOTH_PERIPHERAL).catch(()=>RESULTS.DENIED);
-    if (btStatus !== RESULTS.GRANTED) {
-      btStatus = await request(PERMISSIONS.IOS.BLUETOOTH_PERIPHERAL).catch(()=>RESULTS.DENIED);
-    }
-    // Location permission (when in use)
-    let locStatus = await check(PERMISSIONS.IOS.LOCATION_WHEN_IN_USE).catch(()=>RESULTS.DENIED);
-    if (locStatus !== RESULTS.GRANTED) {
-      locStatus = await request(PERMISSIONS.IOS.LOCATION_WHEN_IN_USE).catch(()=>RESULTS.DENIED);
-    }
+  // Check if target is in range (continuous check)
+  useEffect(() => {
+    const checkInRange = (): boolean => {
+      const devices = Object.values(nearbyDevices);
+      if (devices.length === 0) return false;
 
-    if (btStatus !== RESULTS.GRANTED || locStatus !== RESULTS.GRANTED) {
-      Alert.alert('Permissions required', 'Bluetooth and Location permissions are needed. Open settings?', [
-        {text: 'Cancel', style: 'cancel'},
-        {text: 'Open Settings', onPress: ()=>openSettings()}
-      ]);
-      return false;
-    }
-    // start periodic GPS watch (optional)
-    Geolocation.getCurrentPosition(
-      pos => {
-        setLocation({lat: pos.coords.latitude, lon: pos.coords.longitude});
-      },
-      err => console.warn('gps getCurrentPosition err', err),
-      {enableHighAccuracy: true, timeout: 5000, maximumAge: 2000}
-    );
-    Geolocation.watchPosition(
-      pos => {
-        setLocation({lat: pos.coords.latitude, lon: pos.coords.longitude});
-      },
-      err => console.warn('gps watch err', err),
-      {enableHighAccuracy: true, distanceFilter: 1, interval: 3000, fastestInterval: 1000}
-    );
-    return true;
-  }
+      if (targetIdRef.current) {
+        const target = nearbyDevices[targetIdRef.current];
+        if (!target) return false;
+        return typeof target.distance === 'number' && target.distance <= KILL_RADIUS_METERS;
+      }
+
+      return devices.some(
+        (device) => typeof device.distance === 'number' && device.distance <= KILL_RADIUS_METERS
+      );
+    };
+
+    const cancel = () => {
+      setIsPressed(false);
+
+      if (pressTimer.current) {
+        clearTimeout(pressTimer.current);
+        pressTimer.current = null;
+      }
+
+      Animated.timing(pressProgress, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: false,
+      }).start();
+    };
+
+    const checkInterval = setInterval(() => {
+      const inRange = checkInRange();
+      setTargetInRange(inRange);
+
+      if (isPressed && !inRange) {
+        cancel();
+      }
+    }, 500);
+
+    return () => clearInterval(checkInterval);
+  }, [nearbyDevices, isPressed, pressProgress]);
 
   function startBLEScan() {
     if (scanning) return;
+
+    if (bleState !== 'PoweredOn') {
+      Alert.alert(
+        'Bluetooth Required',
+        'Please enable Bluetooth to play the game.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     setScanning(true);
-    const subscription = manager.onStateChange((state) => {
-      if (state === 'PoweredOn') {
-        // Start scanning
-        manager.startDeviceScan(
-          BLE_SCAN_SERVICE_UUID ? [BLE_SCAN_SERVICE_UUID] : null,
-          {allowDuplicates: true},
-          (error, scannedDevice) => {
-            if (error) {
-              console.warn('scan error', error.message);
-              return;
-            }
-            if (!scannedDevice) return;
-            const id = scannedDevice.id;
-            const rssi = scannedDevice.rssi ?? undefined;
-            let dist: number | undefined;
-            if (typeof rssi === 'number') {
-              dist = rssiToDistance(rssi);
-            }
-            setNearbyDevices((prev: Record<string, {device: Device, distance?: number, rssi?: number}>) => {
-              const next = {...prev};
-              next[id] = {device: scannedDevice, distance: dist, rssi};
-              return next;
-            });
-          }
-        );
+
+    manager.startDeviceScan(
+      BLE_SCAN_SERVICE_UUID ? [BLE_SCAN_SERVICE_UUID] : null,
+      { allowDuplicates: true },
+      (error, scannedDevice) => {
+        if (error) {
+          console.warn('BLE scan error:', error.message);
+          return;
+        }
+
+        if (!scannedDevice) return;
+
+        const id = scannedDevice.id;
+        const rssi = scannedDevice.rssi ?? undefined;
+        const distance = typeof rssi === 'number' ? rssiToDistance(rssi) : undefined;
+
+        setNearbyDevices((prev) => ({
+          ...prev,
+          [id]: {
+            device: scannedDevice,
+            distance,
+            rssi,
+            lastSeen: Date.now(),
+          },
+        }));
       }
-    }, true);
-    // You may want to stop scanning after X seconds; for demo, we continue
+    );
   }
 
   function stopBLEScan() {
@@ -132,83 +210,310 @@ export default function App() {
     setScanning(false);
   }
 
-  // Simple function that returns whether any nearby device meets kill condition:
-  // either BLE-estimated distance < threshold OR GPS distance < threshold (if we know target coords).
-  function isTargetWithinKillRadius(targetCoords?: {lat:number, lon:number}, targetBleId?: string) {
-    // 1) BLE check
-    if (targetBleId) {
-      const entry = nearbyDevices[targetBleId];
-      if (entry && typeof entry.distance === 'number' && entry.distance <= KILL_RADIUS_METERS) return true;
-      // As backup, use RSSI threshold for ~9m; you may tune it, e.g. rssi > -75
-      if (entry && entry.rssi && entry.rssi > -80) return true;
+  function onKillAttemptPressStart() {
+    if (!targetInRange) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
     }
-    // 2) GPS check
-    if (targetCoords && location) {
-      const d = haversineDistMeters(location.lat, location.lon, targetCoords.lat, targetCoords.lon);
-      return d <= KILL_RADIUS_METERS;
-    }
-    // 3) If no info, return false
-    return false;
+
+    setIsPressed(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    // Animate progress bar
+    Animated.timing(pressProgress, {
+      toValue: 1,
+      duration: PRESS_HOLD_DURATION,
+      useNativeDriver: false,
+    }).start();
+
+    // Start hold timer
+    pressTimer.current = setTimeout(() => {
+      onKillSuccess();
+    }, PRESS_HOLD_DURATION);
   }
 
-  // Example kill handler
-  function onKillAttemptPressStart() {
-    // start a press timer (e.g. must hold for 1.5s)
-    pressTimer.current = setTimeout(() => {
-      // on hold complete
-      // In a real game you'd look up who the target is (e.g. via selected player) and then check proximity
-      const targetBleId = targetIdRef.current ?? Object.keys(nearbyDevices)[0]; // sample: pick first nearby device
-      const targetCoords = undefined; // if your game shares GPS to server you could use server-provided coords to check here
-      if (isTargetWithinKillRadius(targetCoords, targetBleId)) {
-        onKillSuccess(targetBleId);
-      } else {
-        Alert.alert('Too far', 'No enemy within 30 feet.');
-      }
-    }, 1500); // require 1.5s hold
-  }
   function onKillAttemptPressEnd() {
+    setIsPressed(false);
+
     if (pressTimer.current) {
       clearTimeout(pressTimer.current);
       pressTimer.current = null;
     }
+
+    // Reset progress animation
+    Animated.timing(pressProgress, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
   }
 
-  function onKillSuccess(targetBleId?: string|null) {
-    // Game logic: locally mark them dead / update server
-    Alert.alert('Kill!', `You killed ${targetBleId ?? 'enemy'}`);
-    // TODO: notify server or emit local game event
+  function onKillSuccess() {
+    setIsPressed(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    // Reset animation
+    pressProgress.setValue(0);
+
+    // Find the target device
+    const targetId = targetIdRef.current ?? Object.keys(nearbyDevices)[0];
+    const targetDevice = nearbyDevices[targetId];
+    const deviceName = targetDevice?.device.name || targetDevice?.device.id || 'enemy';
+
+    Alert.alert(
+      'Kill Successful!',
+      `You eliminated ${deviceName}`,
+      [
+        {
+          text: 'OK',
+          onPress: () => {
+            // TODO: Send kill event to server
+            // TODO: Update game state
+          },
+        },
+      ]
+    );
   }
+
+  // Calculate nearby devices within range
+  const devicesInRange = Object.values(nearbyDevices).filter(
+    (device) => typeof device.distance === 'number' && device.distance <= KILL_RADIUS_METERS
+  );
+
+  const closestDevice = Object.values(nearbyDevices).reduce<DeviceInfo | null>((closest, device) => {
+    if (typeof device.distance !== 'number') return closest;
+    if (!closest || (typeof closest.distance === 'number' && device.distance < closest.distance)) {
+      return device;
+    }
+    return closest;
+  }, null);
+
+  // Progress bar width
+  const progressWidth = pressProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Digital Assassins — Demo</Text>
-      <View style={styles.info}>
-        <Text>BLE scanning: {scanning ? 'ON' : 'OFF'}</Text>
-        <Text>Nearby devices: {Object.keys(nearbyDevices).length}</Text>
-        <Text>Location: {location ? `${location.lat.toFixed(5)}, ${location.lon.toFixed(5)}` : 'unknown'}</Text>
+    <View style={[styles.container, { backgroundColor }]}>
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: textColor }]}>Digital Assassins</Text>
+        <Text style={[styles.subtitle, { color: textColor }]}>Hunt Mode</Text>
       </View>
 
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPressIn={onKillAttemptPressStart}
-        onPressOut={onKillAttemptPressEnd}
-        style={styles.killButton}
-      >
-        <Text style={styles.killText}>PRESS & HOLD TO KILL</Text>
-      </TouchableOpacity>
+      <View style={styles.statusContainer}>
+        <View style={styles.statusRow}>
+          <Text style={[styles.statusLabel, { color: textColor }]}>Bluetooth:</Text>
+          <Text
+            style={[
+              styles.statusValue,
+              { color: bleState === 'PoweredOn' ? primaryColor : dangerColor },
+            ]}
+          >
+            {bleState}
+          </Text>
+        </View>
 
-      <View style={{marginTop:20}}>
-        <Text style={{fontSize:12, color:'#666'}}>Notes: BLE distance is estimated from RSSI and noisy. Use calibration & server-based checks for reliability.</Text>
+        <View style={styles.statusRow}>
+          <Text style={[styles.statusLabel, { color: textColor }]}>Scanning:</Text>
+          <Text style={[styles.statusValue, { color: scanning ? primaryColor : textColor }]}>
+            {scanning ? 'Active' : 'Inactive'}
+          </Text>
+        </View>
+
+        <View style={styles.statusRow}>
+          <Text style={[styles.statusLabel, { color: textColor }]}>Devices Nearby:</Text>
+          <Text style={[styles.statusValue, { color: textColor }]}>
+            {Object.keys(nearbyDevices).length}
+          </Text>
+        </View>
+
+        <View style={styles.statusRow}>
+          <Text style={[styles.statusLabel, { color: textColor }]}>In Range:</Text>
+          <Text
+            style={[
+              styles.statusValue,
+              { color: devicesInRange.length > 0 ? primaryColor : textColor },
+            ]}
+          >
+            {devicesInRange.length}
+          </Text>
+        </View>
+
+        {closestDevice && (
+          <View style={styles.statusRow}>
+            <Text style={[styles.statusLabel, { color: textColor }]}>Closest Target:</Text>
+            <Text style={[styles.statusValue, { color: textColor }]}>
+              {closestDevice.distance?.toFixed(1)}m
+            </Text>
+          </View>
+        )}
       </View>
-    </SafeAreaView>
+
+      <View style={styles.attackContainer}>
+        <TouchableOpacity
+          activeOpacity={1}
+          onPressIn={onKillAttemptPressStart}
+          onPressOut={onKillAttemptPressEnd}
+          disabled={!targetInRange}
+          style={[
+            styles.killButton,
+            {
+              backgroundColor: targetInRange ? dangerColor : '#666',
+              opacity: isPressed ? 0.8 : 1,
+            },
+          ]}
+        >
+          <Text style={styles.killText}>
+            {!targetInRange ? 'OUT OF RANGE' : isPressed ? 'ATTACKING...' : 'PRESS & HOLD TO ATTACK'}
+          </Text>
+        </TouchableOpacity>
+
+        {isPressed && (
+          <View style={styles.progressBarContainer}>
+            <Animated.View
+              style={[
+                styles.progressBar,
+                {
+                  backgroundColor: dangerColor,
+                  width: progressWidth,
+                },
+              ]}
+            />
+          </View>
+        )}
+      </View>
+
+      <View style={styles.infoContainer}>
+        <Text style={[styles.infoText, { color: textColor }]}>
+          {targetInRange
+            ? `Target in range! Hold button for ${PRESS_HOLD_DURATION / 1000}s to eliminate.`
+            : 'Move within 30 feet of your target to attack.'}
+        </Text>
+        <Text style={[styles.noteText, { color: textColor }]}>
+          Note: Distance is estimated from Bluetooth signal strength and may vary based on
+          obstacles and interference.
+        </Text>
+      </View>
+
+      {!scanning && bleState === 'PoweredOn' && (
+        <TouchableOpacity
+          style={[styles.scanButton, { backgroundColor: primaryColor }]}
+          onPress={startBLEScan}
+        >
+          <Text style={styles.scanButtonText}>Start Scanning</Text>
+        </TouchableOpacity>
+      )}
+
+      {scanning && (
+        <TouchableOpacity
+          style={[styles.scanButton, { backgroundColor: '#666' }]}
+          onPress={stopBLEScan}
+        >
+          <Text style={styles.scanButtonText}>Stop Scanning</Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container:{flex:1, alignItems:'center', padding:20},
-  title:{fontSize:20, fontWeight:'700', marginVertical:10},
-  info:{width:'100%', marginVertical:10},
-  killButton:{backgroundColor:'#b22222', paddingVertical:20, paddingHorizontal:30, borderRadius:10},
-  killText:{color:'#fff', fontWeight:'700'}
+  container: {
+    flex: 1,
+    padding: 20,
+  },
+  header: {
+    alignItems: 'center',
+    marginTop: 40,
+    marginBottom: 30,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  subtitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginTop: 5,
+    opacity: 0.7,
+  },
+  statusContainer: {
+    marginBottom: 30,
+    padding: 15,
+    borderRadius: 10,
+    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 5,
+  },
+  statusLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  statusValue: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  attackContainer: {
+    alignItems: 'center',
+    marginVertical: 40,
+  },
+  killButton: {
+    paddingVertical: 30,
+    paddingHorizontal: 40,
+    borderRadius: 15,
+    minWidth: '80%',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  killText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 18,
+    textAlign: 'center',
+  },
+  progressBarContainer: {
+    width: '80%',
+    height: 8,
+    backgroundColor: 'rgba(128, 128, 128, 0.3)',
+    borderRadius: 4,
+    marginTop: 15,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  infoContainer: {
+    paddingHorizontal: 10,
+  },
+  infoText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  noteText: {
+    fontSize: 12,
+    textAlign: 'center',
+    opacity: 0.6,
+    fontStyle: 'italic',
+  },
+  scanButton: {
+    marginTop: 20,
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  scanButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
+  },
 });
-*/
