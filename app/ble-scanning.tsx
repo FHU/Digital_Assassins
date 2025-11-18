@@ -7,10 +7,10 @@ import { BleManager, Device, State } from 'react-native-ble-plx';
 // ---------- CONFIG ----------
 const BLE_SCAN_SERVICE_UUID = null; // null = scan for all devices
 const TX_POWER_DEFAULT = -59; // assumed tx power at 1 meter (calibrate in testing)
-const ENV_FACTOR = 2; // 2 = open space, 3-4 = indoor (tune based on environment)
+const ENV_FACTOR = 3; // 2 = open space, 3-4 = indoor (tune based on environment)
 const KILL_RADIUS_METERS = 9.144; // 30 feet in meters
-const PRESS_HOLD_DURATION = 1500; // milliseconds to hold for kill
-const DEVICE_TIMEOUT = 5000; // consider device gone if not seen in 5 seconds
+const PRESS_HOLD_DURATION = 10000; // milliseconds to hold for kill
+const DEVICE_TIMEOUT = 2000; // consider device gone if not seen in 2 seconds
 // ----------------------------
 
 const manager = new BleManager();
@@ -298,7 +298,7 @@ export default function BLEScanning() {
     <View style={[styles.container, { backgroundColor }]}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: textColor }]}>Digital Assassins</Text>
-        <Text style={[styles.subtitle, { color: textColor }]}>Hunt Mode</Text>
+        <Text style={[styles.subtitle, { color: textColor }]}>Your Target Is: NIMA. FINISH HIM</Text>
       </View>
 
       <View style={styles.statusContainer}>
