@@ -26,34 +26,13 @@ export default function JoinScreen() {
   const handleBluetoothEnable = async () => {
     const success = await enableBluetooth();
     if (success && currentCode) {
-      // Retry the code submission after enabling Bluetooth
-      handleCodeSubmit(currentCode);
+      // Retry the code submission after enabling Bluetooth, bypassing the check
+      await processCodeSubmit(currentCode);
     }
   };
 
-  const handleCodeSubmit = async (code: string) => {
-    setCurrentCode(code);
+  const processCodeSubmit = async (code: string) => {
     setIsLoading(true);
-
-    // Check if Bluetooth is enabled first
-    if (!isBluetoothEnabled) {
-      setIsLoading(false);
-      Alert.alert(
-        "Bluetooth Required",
-        "Bluetooth must be enabled to join a match",
-        [
-          {
-            text: "Enable Bluetooth",
-            onPress: handleBluetoothEnable,
-          },
-          {
-            text: "Cancel",
-            onPress: () => setCurrentCode(""),
-          },
-        ]
-      );
-      return;
-    }
 
     // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -73,6 +52,32 @@ export default function JoinScreen() {
       pathname: "/join_lobby",
       params: { code },
     });
+  };
+
+  const handleCodeSubmit = async (code: string) => {
+    setCurrentCode(code);
+
+    // Check if Bluetooth is enabled first
+    if (!isBluetoothEnabled) {
+      Alert.alert(
+        "Bluetooth Required",
+        "Bluetooth must be enabled to join a match",
+        [
+          {
+            text: "Enable Bluetooth",
+            onPress: handleBluetoothEnable,
+          },
+          {
+            text: "Cancel",
+            onPress: () => setCurrentCode(""),
+          },
+        ]
+      );
+      return;
+    }
+
+    // If Bluetooth is enabled, process the code
+    await processCodeSubmit(code);
   };
 
   const styles = StyleSheet.create({
