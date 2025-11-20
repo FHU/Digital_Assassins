@@ -1,34 +1,109 @@
+import JoinCodeInput from "@/components/JoinCodeInput";
 import { useThemeColor } from "@/hooks/useThemeColor";
+import { useBluetooth } from "@/hooks/useBluetooth";
+import { getLobbyByCode } from "@/services/LobbyStore";
 import { useRouter } from "expo-router";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useState } from "react";
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export default function JoinScreen() {
   const router = useRouter();
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
   const tintColor = useThemeColor({}, "tint");
+  const { isBluetoothEnabled, enableBluetooth } = useBluetooth();
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentCode, setCurrentCode] = useState<string>("");
+
+  const handleBluetoothEnable = async () => {
+    const success = await enableBluetooth();
+    if (success && currentCode) {
+      // Retry the code submission after enabling Bluetooth
+      handleCodeSubmit(currentCode);
+    }
+  };
+
+  const handleCodeSubmit = async (code: string) => {
+    setCurrentCode(code);
+    setIsLoading(true);
+
+    // Check if Bluetooth is enabled first
+    if (!isBluetoothEnabled) {
+      setIsLoading(false);
+      Alert.alert(
+        "Bluetooth Required",
+        "Bluetooth must be enabled to join a match",
+        [
+          {
+            text: "Enable Bluetooth",
+            onPress: handleBluetoothEnable,
+          },
+          {
+            text: "Cancel",
+            onPress: () => setCurrentCode(""),
+          },
+        ]
+      );
+      return;
+    }
+
+    // Simulate network delay
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const lobby = getLobbyByCode(code);
+
+    if (!lobby) {
+      setIsLoading(false);
+      Alert.alert("Invalid Code", "No lobby found with this code. Try again.");
+      return;
+    }
+
+    setIsLoading(false);
+
+    // Navigate to join_lobby screen with code as param
+    router.push({
+      pathname: "/join_lobby",
+      params: { code },
+    });
+  };
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor,
+    },
+    scrollContent: {
+      flexGrow: 1,
       justifyContent: "center",
-      alignItems: "center",
       paddingHorizontal: 20,
+      paddingVertical: 40,
     },
     title: {
       fontSize: 32,
       fontWeight: "700",
       color: textColor,
-      marginBottom: 20,
+      marginBottom: 12,
       textAlign: "center",
     },
-    placeholder: {
-      fontSize: 16,
-      color: textColor,
-      opacity: 0.6,
+    subtitle: {
+      fontSize: 14,
+      color: textColor + "99",
       marginBottom: 40,
       textAlign: "center",
+    },
+    inputSection: {
+      marginBottom: 32,
+    },
+    buttonContainer: {
+      gap: 12,
     },
     backButton: {
       paddingVertical: 12,
@@ -38,7 +113,7 @@ export default function JoinScreen() {
       alignItems: "center",
     },
     backButtonText: {
-      color: "#fff",
+      color: "black",
       fontSize: 16,
       fontWeight: "600",
     },
@@ -46,12 +121,31 @@ export default function JoinScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Join Match</Text>
-      <Text style={styles.placeholder}>Join setup coming soon...</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.title}>Join Match</Text>
+        <Text style={styles.subtitle}>
+          Ask the host for their 6-digit join code
+        </Text>
 
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <Text style={styles.backButtonText}>Back Home</Text>
-      </TouchableOpacity>
+        <View style={styles.inputSection}>
+          <JoinCodeInput
+            onCodeSubmit={handleCodeSubmit}
+            isLoading={isLoading}
+          />
+        </View>
+
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.backButtonText}>Back Home</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </View>
   );
 }

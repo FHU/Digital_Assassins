@@ -10,8 +10,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Repository**: https://github.com/FHU/Digital_Assassins.git
 - **Framework**: React Native with Expo (v54.0.13)
 - **Language**: TypeScript (v5.9.2, strict mode)
-- **Build System**: Expo managed workflow
+- **Build System**: Expo managed workflow with new architecture enabled
 - **Package Manager**: npm
+- **Status**: Early development - core navigation and theme system in place, game logic to be implemented
 
 ## Essential Commands
 
@@ -45,39 +46,37 @@ eas build --platform android  # Build for Android (requires EAS account)
 ### Directory Organization
 ```
 app/                    # Active development (file-based routing)
-├── _layout.tsx        # Root layout wrapper
-└── index.tsx          # Home screen / root route
+├── _layout.tsx        # Root layout wrapper (Stack navigation)
+├── index.tsx          # Home screen / root route
+├── host.tsx           # Host match screen
+└── join.tsx           # Join match screen
 
-app-example/           # Reference/template code (example patterns)
-components/            # Reusable UI components (if created)
-constants/             # Shared constants (colors, fonts, etc.)
-hooks/                 # Custom React hooks
+constants/             # Shared constants (theme colors, etc.)
+hooks/                 # Custom React hooks (useColorScheme, useThemeColor)
 assets/                # Static images and fonts
 ```
 
-### File-Based Routing (Expo Router)
-- Files in `/app` automatically become routes
-- `_layout.tsx` creates a layout wrapper for its directory
-- `(tabs)` syntax creates route groups without affecting the URL
-- `_layout.tsx` files define navigation structure for nested routes
-- Use `.ios.tsx`, `.android.tsx`, `.web.tsx` for platform-specific code
+**Note**: The `app-example/` directory only exists after running `npm run reset-project`. The `components/` directory should be created as reusable UI components are extracted.
 
-Example structure:
-```
-app/
-├── _layout.tsx           # Root wrapper
-├── index.tsx             # "/" route
-└── (tabs)/
-    ├── _layout.tsx       # Tab navigation definition
-    ├── home.tsx          # "/home" route
-    └── explore.tsx       # "/explore" route
-```
+### File-Based Routing (Expo Router)
+- Files in `/app` automatically become routes based on filename
+- `_layout.tsx` files define navigation structure and wrappers for their directory
+- `(groupName)` syntax creates route groups without affecting the URL path
+- Use `.ios.tsx`, `.android.tsx`, `.web.tsx` suffixes for platform-specific code
+
+Current routes:
+- `index.tsx` → "/" (Home screen)
+- `host.tsx` → "/host" (Host match setup)
+- `join.tsx` → "/join" (Join match screen)
+
+The root `_layout.tsx` uses `Stack` navigation to manage screen transitions.
 
 ### Theme System
-- Colors and typography are centralized (reference: `app-example/constants/theme.ts`)
-- Custom hooks: `useColorScheme()`, `useThemeColor()` provide light/dark mode support
-- Create themed components that accept `lightColor` and `darkColor` props
-- System preference automatically switches theme (iOS/Android/web respect user settings)
+- Colors are defined in `constants/theme.ts` (primary, danger, text, tint, background, etc.)
+- `hooks/useColorScheme.ts` - Detects system color scheme preference (light/dark)
+- `hooks/useThemeColor.ts` - Returns appropriate color based on theme mode
+- Call `useThemeColor({}, "colorName")` in components to get theme-aware colors
+- System preference automatically switches theme (respects iOS/Android/web system settings)
 
 ### UI Components Pattern
 - Use TypeScript for all components (strict mode enabled)
@@ -119,10 +118,11 @@ app/
 - No tests are configured; focus on code review and manual testing
 
 ### Component Development
-- Place reusable components in `/components` directory
+- As components become reusable across screens, extract them to `/components` directory
+- Create a `components/index.ts` barrel export for clean imports: `export { Button } from './Button'`
+- Use `useThemeColor` hook for theme-aware styling in all components
 - Use composition over inheritance for complex UIs
-- Create a `components/index.ts` barrel export for clean imports
-- Reference `app-example/components/` for component patterns (themed text, views, etc.)
+- Each screen currently uses inline `StyleSheet.create()` - consider extracting styles as component library grows
 
 ### Cross-Platform Development
 - Write platform-agnostic code by default
@@ -172,17 +172,19 @@ app/
 - Requires EAS account (see https://eas.dev)
 - Credentials are managed by Expo (not stored in repo per `.gitignore`)
 
-## Common Patterns from app-example
+## Current Application Structure
 
-The `app-example` directory contains reference implementations:
-- **Tab navigation** with haptic feedback (`app-example/app/(tabs)/_layout.tsx`)
-- **Themed text and views** that support light/dark mode
-- **Modal screens** with navigation
-- **Custom hooks** for theme management
-- **Parallax scroll views** for animated effects
-- **Color scheme detection** (system preference + custom override)
+**Digital Assassins** is a multiplayer game application in early development. The current routing structure:
+- `/` - Home screen with Host/Join buttons
+- `/host` - Host match setup screen (placeholder)
+- `/join` - Join match screen (placeholder)
 
-Reference these files when implementing similar features.
+### Theme & Styling
+- Colors are defined in `constants/theme.ts`
+- Custom hooks provide theme colors: `useColorScheme()`, `useThemeColor()`
+- The app uses inline `StyleSheet.create()` for component styling (not extracted to separate files yet)
+- Theme colors include: `primary`, `danger`, `text`, `tint`, `background`
+- System automatically switches between light/dark mode based on device preference
 
 ## Git Workflow
 

@@ -15,7 +15,7 @@ export default function ParticipantList({
   );
   const textColor = useThemeColor({}, "text");
   const backgroundColor = useThemeColor({}, "background");
-  const tintColor = useThemeColor({}, "tint");
+  const dangerColor = useThemeColor({}, "danger");
 
   const addParticipant = (username: string) => {
     if (username.trim()) {
@@ -46,18 +46,27 @@ export default function ParticipantList({
     participantWrapper: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
+      gap: 12,
     },
     removeButton: {
-      paddingVertical: 8,
-      paddingHorizontal: 10,
-      backgroundColor: tintColor,
-      borderRadius: 6,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      backgroundColor: dangerColor,
+      borderRadius: 8,
+      minWidth: 80,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+      elevation: 3,
     },
     removeButtonText: {
       color: "#fff",
-      fontSize: 12,
-      fontWeight: "600",
+      fontSize: 13,
+      fontWeight: "700",
+      letterSpacing: 0.3,
     },
     emptyText: {
       fontSize: 14,
