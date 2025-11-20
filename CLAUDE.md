@@ -4,6 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
+<<<<<<< Updated upstream
 **Digital Assassins** is a cross-platform React Native application built with Expo, supporting iOS, Android, and web platforms from a single TypeScript codebase. The project uses Expo Router for file-based routing and React Navigation for advanced navigation patterns.
 
 - **Repository**: https://github.com/FHU/Digital_Assassins.git
@@ -233,3 +234,89 @@ Reference these files when implementing similar features.
 - Use device/simulator dev menu: Shake device (iOS) or press menu button (Android)
 - VSCode debugging: Install `expo.vscode-expo-tools` extension for enhanced debugging
 - Web debugging: Use browser DevTools (F12)
+=======
+This is a React Native/Expo mobile application called "Digital_Assassins" built with TypeScript. It uses expo-router for file-based routing and supports iOS, Android, and web platforms. The project follows the Expo 54 framework with React 19 and React Native 0.81.
+
+## Key Dependencies
+
+- **Expo 54**: Cross-platform mobile framework
+- **expo-router 6**: File-based routing system (similar to Next.js)
+- **React 19 & React Native 0.81**: UI framework
+- **React Navigation**: Navigation library with bottom tabs
+- **React Native Reanimated & Gesture Handler**: Animation and gesture support
+- **React Compiler**: Experimental React optimization enabled in app.json
+
+## Directory Structure
+
+```
+├── app/                    # Main app code (file-based routing with expo-router)
+│   ├── (tabs)/             # Tab layout group - renders bottom tab navigation
+│   │   ├── index.tsx       # Home screen
+│   │   ├── explore.tsx     # Explore screen
+│   │   └── _layout.tsx     # Tab layout configuration
+│   ├── modal.tsx           # Modal screen example
+│   └── _layout.tsx         # Root layout with theme provider and stack navigator
+├── components/             # Reusable UI components
+│   ├── ui/                 # Atomic/base components (IconSymbol, Collapsible)
+│   └── *                   # Feature/composite components (ThemedText, ThemedView, etc.)
+├── constants/              # Theme colors and constants
+├── hooks/                  # Custom React hooks (useColorScheme, useThemeColor)
+├── scripts/                # Build and utility scripts
+├── assets/                 # Images, icons, fonts
+└── app.json                # Expo configuration and plugins
+```
+
+## Common Development Commands
+
+```bash
+# Start dev server
+npm start
+
+# Start on specific platform
+npm run android              # Android emulator
+npm run ios                  # iOS simulator
+npm run web                  # Web browser
+
+# Linting
+npm run lint                 # Run ESLint
+
+# Project reset
+npm run reset-project        # Move starter code to app-example, create blank app
+```
+
+## Architecture & Routing
+
+The app uses **expo-router** for file-based routing (file system → routes):
+- `app/_layout.tsx` is the root layout wrapping all routes with a theme provider and status bar
+- `app/(tabs)/` is a layout group creating a tab-based navigation UI
+- Screens are defined by `.tsx` files in the app directory
+- Routes are typed automatically with the `typedRoutes` experiment enabled
+
+**Theming**: Color scheme (light/dark) is determined by `useColorScheme()` hook and passed through React Navigation's `ThemeProvider`.
+
+## TypeScript Configuration
+
+- Strict mode enabled: `"strict": true`
+- Path alias: `@/*` maps to repository root for clean imports
+- Target: ES2020+ with module support for React Native
+
+## Theme System
+
+- Colors defined in `constants/theme.ts` with light/dark variants
+- `useColorScheme()` hook detects system theme preference
+- `useThemeColor()` hook applies colors to specific design tokens
+- Components use `ThemedText` and `ThemedView` for automatic theme support
+
+## Component Patterns
+
+- **Themed Components**: `ThemedText` and `ThemedView` automatically adapt to light/dark mode
+- **Icon System**: `IconSymbol` component wraps platform-specific icon libraries
+- **Haptic Feedback**: `HapticTab` provides haptic feedback on tab presses
+- **Scroll Views**: `ParallaxScrollView` provides parallax header effect
+
+## ESLint & Code Quality
+
+- Configured via `eslint-config-expo` with flat config format
+- Run `npm run lint` to check code
+- The `dist/` directory is ignored
+>>>>>>> Stashed changes
