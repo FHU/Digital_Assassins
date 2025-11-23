@@ -1,7 +1,7 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BleManager, Device, State } from 'react-native-ble-plx';
 
 // ---------- CONFIG ----------
@@ -154,29 +154,34 @@ export default function BLEScanning() {
       );
     };
 
-    const cancel = () => {
-      setIsPressed(false);
-
-      if (pressTimer.current) {
-        clearTimeout(pressTimer.current);
-        pressTimer.current = null;
-      }
-
-      Animated.timing(pressProgress, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: false,
-      }).start();
-    };
-
     const checkInterval = setInterval(() => {
       const inRange = checkInRange();
+
+      // Debug logging - remove in production
+      const deviceCount = Object.values(nearbyDevices).length;
+      const devicesWithDistance = Object.values(nearbyDevices).filter(d => d.distance).length;
+      console.log(`[Range Check] Devices: ${deviceCount}, With Distance: ${devicesWithDistance}, In Range: ${inRange}`);
+
       setTargetInRange(inRange);
 
+      // Cancel ongoing attack if target goes out of range
       if (isPressed && !inRange) {
-        cancel();
+        console.log('[Range Check] Cancelling attack - target out of range');
+        setIsPressed(false);
+        setAttackStartTime(null);
+
+        if (pressTimer.current) {
+          clearTimeout(pressTimer.current);
+          pressTimer.current = null;
+        }
+
+        Animated.timing(pressProgress, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: false,
+        }).start();
       }
-    }, 500);
+    }, 200); // Check more frequently (200ms instead of 500ms)
 
     return () => clearInterval(checkInterval);
   }, [nearbyDevices, isPressed, pressProgress]);
@@ -414,10 +419,15 @@ export default function BLEScanning() {
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: textColor }]}>Digital Assassins</Text>
-        <Text style={[styles.subtitle, { color: textColor }]}>Your Target Is: NIMA. FINISH HIM</Text>
-      </View>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={true}
+      >
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: textColor }]}>Digital Assassins</Text>
+          <Text style={[styles.subtitle, { color: textColor }]}>Your Target Is: NIMA. FINISH HIM</Text>
+        </View>
 
       {/* Health Bars Section */}
       <View style={styles.healthSection}>
@@ -674,6 +684,7 @@ export default function BLEScanning() {
           <Text style={styles.testButtonText}>Test: Target Dodged</Text>
         </TouchableOpacity>
       </View>
+      </ScrollView>
     </View>
   );
 }
@@ -681,7 +692,13 @@ export default function BLEScanning() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
     padding: 20,
+    paddingBottom: 40,
   },
   header: {
     alignItems: 'center',
