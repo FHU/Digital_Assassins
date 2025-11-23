@@ -9,8 +9,10 @@ const BLE_SCAN_SERVICE_UUID = null; // null = scan for all devices
 const TX_POWER_DEFAULT = -59; // assumed tx power at 1 meter (calibrate in testing)
 const ENV_FACTOR = 3; // 2 = open space, 3-4 = indoor (tune based on environment)
 const KILL_RADIUS_METERS = 9.144; // 30 feet in meters
-const PRESS_HOLD_DURATION = 10000; // milliseconds to hold for kill
 const DEVICE_TIMEOUT = 2000; // consider device gone if not seen in 2 seconds
+const MAX_HEALTH = 10000; // 10 seconds of health in milliseconds
+const ASSASSINATE_HOLD_DURATION = 2000; // 2 seconds to mark target before attack unlocks
+const DODGE_WINDOW = 2000; // 2 seconds to press dodge when being attacked (TODO: implement incoming attack detection)
 // ----------------------------
 
 const manager = new BleManager();
@@ -38,9 +40,25 @@ export default function BLEScanning() {
   const [isPressed, setIsPressed] = useState(false);
   const [targetInRange, setTargetInRange] = useState(false);
 
+  // Health system
+  const [playerHealth, setPlayerHealth] = useState(MAX_HEALTH);
+  const [opponentHealth, setOpponentHealth] = useState(MAX_HEALTH);
+
+  // Dodge system
+  const [isDodgePressed, setIsDodgePressed] = useState(false);
+  const [beingAttacked, setBeingAttacked] = useState(false); // lights up dodge button
+
+  // Assassinate system
+  const [isAssassinatePressed, setIsAssassinatePressed] = useState(false);
+  const [assassinateUnlocked, setAssassinateUnlocked] = useState(false);
+  const [attackStartTime, setAttackStartTime] = useState<number | null>(null);
+
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressProgress = useRef(new Animated.Value(0)).current;
   const targetIdRef = useRef<string | null>(null); // would be set from game state/server
+
+  const dodgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const assassinateProgress = useRef(new Animated.Value(0)).current;
 
   // Theme colors
   const backgroundColor = useThemeColor({}, 'background');
@@ -210,35 +228,151 @@ export default function BLEScanning() {
     setScanning(false);
   }
 
+
+  // Dodge button handlers - only for defending
+  function onDodgePressStart() {
+    if (!beingAttacked) {
+      // Can only dodge when being attacked
+      return;
+    }
+
+    setIsDodgePressed(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+    // Successfully dodged! Cancel incoming attack
+    setBeingAttacked(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    // TODO: Send dodge event to server/attacker
+    // This should notify the attacker that their attack was dodged
+    // The attacker will need to restart by marking target again
+
+    Alert.alert('Dodged!', 'You successfully dodged the attack!', [{ text: 'OK' }]);
+  }
+
+  function onDodgePressEnd() {
+    setIsDodgePressed(false);
+  }
+
+  // Function to handle when opponent dodges (called from server/network)
+  function onOpponentDodged() {
+    // Reset attacker's state - they must restart the assassination process
+    setAssassinateUnlocked(false);
+    setIsPressed(false);
+    setAttackStartTime(null);
+
+    // Stop any ongoing attack
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+
+    // Reset animations
+    Animated.timing(pressProgress, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Alert.alert(
+      'Target Dodged!',
+      'Your target dodged the attack! You must mark them again to restart.',
+      [{ text: 'OK' }]
+    );
+  }
+
+  // Assassinate button handlers - hold for 2s to unlock attack button
+  function onAssassinatePressStart() {
+    if (!targetInRange) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    setIsAssassinatePressed(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    // Animate assassinate progress bar
+    Animated.timing(assassinateProgress, {
+      toValue: 1,
+      duration: ASSASSINATE_HOLD_DURATION, // 2 seconds to unlock attack
+      useNativeDriver: false,
+    }).start();
+
+    // Start assassinate timer - after 2 seconds, unlock attack button
+    dodgeTimer.current = setTimeout(() => {
+      setAssassinateUnlocked(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }, ASSASSINATE_HOLD_DURATION);
+  }
+
+  function onAssassinatePressEnd() {
+    setIsAssassinatePressed(false);
+
+    if (dodgeTimer.current) {
+      clearTimeout(dodgeTimer.current);
+      dodgeTimer.current = null;
+    }
+
+    // Reset assassinate progress animation
+    Animated.timing(assassinateProgress, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+  }
+
+  // Attack button handlers - deals damage over time (only works if assassinate was held first)
   function onKillAttemptPressStart() {
     if (!targetInRange) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
 
-    setIsPressed(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (!assassinateUnlocked) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
 
-    // Animate progress bar
+    setIsPressed(true);
+    setAttackStartTime(Date.now());
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+    // Animate attack progress
     Animated.timing(pressProgress, {
       toValue: 1,
-      duration: PRESS_HOLD_DURATION,
+      duration: MAX_HEALTH, // Full duration equals max health
       useNativeDriver: false,
     }).start();
-
-    // Start hold timer
-    pressTimer.current = setTimeout(() => {
-      onKillSuccess();
-    }, PRESS_HOLD_DURATION);
   }
 
   function onKillAttemptPressEnd() {
-    setIsPressed(false);
+    if (!isPressed || attackStartTime === null) return;
 
-    if (pressTimer.current) {
-      clearTimeout(pressTimer.current);
-      pressTimer.current = null;
-    }
+    // Calculate damage dealt (time held in milliseconds)
+    const attackEndTime = Date.now();
+    const damageDealt = attackEndTime - attackStartTime;
+
+    // Update opponent health (subtract damage, don't go below 0)
+    setOpponentHealth((prevHealth) => {
+      const newHealth = Math.max(0, prevHealth - damageDealt);
+
+      // Check if opponent is eliminated
+      if (newHealth === 0) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert(
+          'Target Eliminated!',
+          'You have successfully eliminated your target!',
+          [{ text: 'OK' }]
+        );
+      }
+
+      return newHealth;
+    });
+
+    // Reset attack state
+    setIsPressed(false);
+    setAttackStartTime(null);
 
     // Reset progress animation
     Animated.timing(pressProgress, {
@@ -246,33 +380,8 @@ export default function BLEScanning() {
       duration: 200,
       useNativeDriver: false,
     }).start();
-  }
 
-  function onKillSuccess() {
-    setIsPressed(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-    // Reset animation
-    pressProgress.setValue(0);
-
-    // Find the target device
-    const targetId = targetIdRef.current ?? Object.keys(nearbyDevices)[0];
-    const targetDevice = nearbyDevices[targetId];
-    const deviceName = targetDevice?.device.name || targetDevice?.device.id || 'enemy';
-
-    Alert.alert(
-      'Kill Successful!',
-      `You eliminated ${deviceName}`,
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            // TODO: Send kill event to server
-            // TODO: Update game state
-          },
-        },
-      ]
-    );
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
 
   // Calculate nearby devices within range
@@ -294,11 +403,61 @@ export default function BLEScanning() {
     outputRange: ['0%', '100%'],
   });
 
+  const assassinateProgressWidth = assassinateProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
+
+  // Calculate health percentages for health bars
+  const playerHealthPercent = (playerHealth / MAX_HEALTH) * 100;
+  const opponentHealthPercent = (opponentHealth / MAX_HEALTH) * 100;
+
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: textColor }]}>Digital Assassins</Text>
         <Text style={[styles.subtitle, { color: textColor }]}>Your Target Is: NIMA. FINISH HIM</Text>
+      </View>
+
+      {/* Health Bars Section */}
+      <View style={styles.healthSection}>
+        {/* Player Health */}
+        <View style={styles.healthBarWrapper}>
+          <Text style={[styles.healthLabel, { color: textColor }]}>Your Health</Text>
+          <View style={styles.healthBarContainer}>
+            <View
+              style={[
+                styles.healthBar,
+                {
+                  width: `${playerHealthPercent}%`,
+                  backgroundColor: primaryColor,
+                },
+              ]}
+            />
+          </View>
+          <Text style={[styles.healthText, { color: textColor }]}>
+            {(playerHealth / 1000).toFixed(1)}s / {MAX_HEALTH / 1000}s
+          </Text>
+        </View>
+
+        {/* Opponent Health */}
+        <View style={styles.healthBarWrapper}>
+          <Text style={[styles.healthLabel, { color: textColor }]}>Target Health</Text>
+          <View style={styles.healthBarContainer}>
+            <View
+              style={[
+                styles.healthBar,
+                {
+                  width: `${opponentHealthPercent}%`,
+                  backgroundColor: dangerColor,
+                },
+              ]}
+            />
+          </View>
+          <Text style={[styles.healthText, { color: textColor }]}>
+            {(opponentHealth / 1000).toFixed(1)}s / {MAX_HEALTH / 1000}s
+          </Text>
+        </View>
       </View>
 
       <View style={styles.statusContainer}>
@@ -351,21 +510,91 @@ export default function BLEScanning() {
       </View>
 
       <View style={styles.attackContainer}>
+        {/* Dodge Button (Top) */}
+        <TouchableOpacity
+          activeOpacity={1}
+          onPressIn={onDodgePressStart}
+          onPressOut={onDodgePressEnd}
+          disabled={!beingAttacked}
+          style={[
+            styles.dodgeButton,
+            {
+              backgroundColor: beingAttacked ? '#007AFF' : '#555',
+              opacity: isDodgePressed ? 0.8 : 1,
+            },
+          ]}
+        >
+          <Text style={styles.buttonText}>
+            {beingAttacked ? '⚠️ DODGE NOW!' : 'DODGE (Defend Only)'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Assassinate Button (Middle) */}
+        <TouchableOpacity
+          activeOpacity={1}
+          onPressIn={onAssassinatePressStart}
+          onPressOut={onAssassinatePressEnd}
+          disabled={assassinateUnlocked || !targetInRange}
+          style={[
+            styles.assassinateButton,
+            {
+              backgroundColor: assassinateUnlocked
+                ? '#4CAF50'
+                : targetInRange
+                ? '#FF6B00'
+                : '#666',
+              opacity: isAssassinatePressed ? 0.8 : 1,
+            },
+          ]}
+        >
+          <Text style={styles.buttonText}>
+            {assassinateUnlocked
+              ? '✓ TARGET MARKED'
+              : !targetInRange
+              ? 'OUT OF RANGE'
+              : isAssassinatePressed
+              ? 'MARKING TARGET...'
+              : 'MARK TARGET (Hold 2s)'}
+          </Text>
+        </TouchableOpacity>
+
+        {isAssassinatePressed && (
+          <View style={styles.progressBarContainer}>
+            <Animated.View
+              style={[
+                styles.progressBar,
+                {
+                  backgroundColor: '#FF6B00',
+                  width: assassinateProgressWidth,
+                },
+              ]}
+            />
+          </View>
+        )}
+
+        {/* Attack Button (Bottom) - deals damage */}
         <TouchableOpacity
           activeOpacity={1}
           onPressIn={onKillAttemptPressStart}
           onPressOut={onKillAttemptPressEnd}
-          disabled={!targetInRange}
+          disabled={!assassinateUnlocked || !targetInRange}
           style={[
             styles.killButton,
             {
-              backgroundColor: targetInRange ? dangerColor : '#666',
+              backgroundColor:
+                assassinateUnlocked && targetInRange ? dangerColor : '#666',
               opacity: isPressed ? 0.8 : 1,
             },
           ]}
         >
-          <Text style={styles.killText}>
-            {!targetInRange ? 'OUT OF RANGE' : isPressed ? 'ATTACKING...' : 'PRESS & HOLD TO ATTACK'}
+          <Text style={styles.buttonText}>
+            {!assassinateUnlocked
+              ? 'MARK TARGET FIRST'
+              : !targetInRange
+              ? 'OUT OF RANGE'
+              : isPressed
+              ? 'ATTACKING...'
+              : 'ATTACK (Hold to Damage)'}
           </Text>
         </TouchableOpacity>
 
@@ -386,13 +615,15 @@ export default function BLEScanning() {
 
       <View style={styles.infoContainer}>
         <Text style={[styles.infoText, { color: textColor }]}>
-          {targetInRange
-            ? `Target in range! Hold button for ${PRESS_HOLD_DURATION / 1000}s to eliminate.`
-            : 'Move within 30 feet of your target to attack.'}
+          {!assassinateUnlocked
+            ? 'Hold MARK TARGET for 2s to unlock ATTACK button'
+            : !targetInRange
+            ? 'Move within 30 feet of your target'
+            : 'Hold ATTACK button to deal damage over time!'}
         </Text>
         <Text style={[styles.noteText, { color: textColor }]}>
-          Note: Distance is estimated from Bluetooth signal strength and may vary based on
-          obstacles and interference.
+          Attack: Hold MARK TARGET (2s) → Hold ATTACK to deal damage (time held = damage dealt).
+          Defend: Press DODGE when attacked!
         </Text>
       </View>
 
@@ -413,6 +644,36 @@ export default function BLEScanning() {
           <Text style={styles.scanButtonText}>Stop Scanning</Text>
         </TouchableOpacity>
       )}
+
+      {/* TEST BUTTONS - Remove in production */}
+      <View style={styles.testButtonContainer}>
+        <TouchableOpacity
+          style={[styles.testButton, { backgroundColor: '#FF6B00' }]}
+          onPress={() => {
+            setBeingAttacked(true);
+            setTimeout(() => setBeingAttacked(false), DODGE_WINDOW);
+          }}
+        >
+          <Text style={styles.testButtonText}>Test: Incoming Attack</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.testButton, { backgroundColor: dangerColor }]}
+          onPress={() => {
+            setPlayerHealth((prev) => Math.max(0, prev - 1000));
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          }}
+        >
+          <Text style={styles.testButtonText}>Test: Take 1s Damage</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.testButton, { backgroundColor: '#4CAF50' }]}
+          onPress={onOpponentDodged}
+        >
+          <Text style={styles.testButtonText}>Test: Target Dodged</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -425,7 +686,7 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginTop: 40,
-    marginBottom: 30,
+    marginBottom: 20,
   },
   title: {
     fontSize: 28,
@@ -437,8 +698,39 @@ const styles = StyleSheet.create({
     marginTop: 5,
     opacity: 0.7,
   },
+  healthSection: {
+    marginBottom: 20,
+    padding: 15,
+    borderRadius: 10,
+    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+  },
+  healthBarWrapper: {
+    marginVertical: 8,
+  },
+  healthLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 5,
+  },
+  healthBarContainer: {
+    width: '100%',
+    height: 20,
+    backgroundColor: 'rgba(128, 128, 128, 0.3)',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  healthBar: {
+    height: '100%',
+    borderRadius: 10,
+  },
+  healthText: {
+    fontSize: 12,
+    marginTop: 3,
+    textAlign: 'right',
+    opacity: 0.8,
+  },
   statusContainer: {
-    marginBottom: 30,
+    marginBottom: 20,
     padding: 15,
     borderRadius: 10,
     backgroundColor: 'rgba(128, 128, 128, 0.1)',
@@ -458,10 +750,36 @@ const styles = StyleSheet.create({
   },
   attackContainer: {
     alignItems: 'center',
-    marginVertical: 40,
+    marginVertical: 20,
+  },
+  dodgeButton: {
+    paddingVertical: 25,
+    paddingHorizontal: 40,
+    borderRadius: 15,
+    minWidth: '80%',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    marginBottom: 10,
+  },
+  assassinateButton: {
+    paddingVertical: 25,
+    paddingHorizontal: 40,
+    borderRadius: 15,
+    minWidth: '80%',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    marginBottom: 10,
   },
   killButton: {
-    paddingVertical: 30,
+    paddingVertical: 25,
     paddingHorizontal: 40,
     borderRadius: 15,
     minWidth: '80%',
@@ -472,10 +790,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
-  killText: {
+  buttonText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 18,
+    fontSize: 16,
     textAlign: 'center',
   },
   progressBarContainer: {
@@ -483,7 +801,8 @@ const styles = StyleSheet.create({
     height: 8,
     backgroundColor: 'rgba(128, 128, 128, 0.3)',
     borderRadius: 4,
-    marginTop: 15,
+    marginTop: 8,
+    marginBottom: 10,
     overflow: 'hidden',
   },
   progressBar: {
@@ -515,5 +834,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 16,
+  },
+  testButtonContainer: {
+    marginTop: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    gap: 10,
+  },
+  testButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  testButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
   },
 });
