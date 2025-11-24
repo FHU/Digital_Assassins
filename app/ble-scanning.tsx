@@ -58,7 +58,20 @@ export default function BLEScanning() {
   const targetIdRef = useRef<string | null>(null); // would be set from game state/server
 
   const dodgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const assassinateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const assassinateProgress = useRef(new Animated.Value(0)).current;
+
+  // Animated sword icon for attack button
+  const swordRotation = useRef(new Animated.Value(0)).current;
+  const swordScale = useRef(new Animated.Value(1)).current;
+
+  // Shield animation for successful dodge
+  const shieldScale = useRef(new Animated.Value(0)).current;
+  const shieldOpacity = useRef(new Animated.Value(0)).current;
+  const [showShield, setShowShield] = useState(false);
+
+  // Attack border glow animation
+  const attackBorderOpacity = useRef(new Animated.Value(0)).current;
 
   // Theme colors
   const backgroundColor = useThemeColor({}, 'background');
@@ -186,6 +199,110 @@ export default function BLEScanning() {
     return () => clearInterval(checkInterval);
   }, [nearbyDevices, isPressed, pressProgress]);
 
+  // Animate glowing border when being attacked
+  useEffect(() => {
+    if (beingAttacked) {
+      // Pulsing glow animation
+      const pulseAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(attackBorderOpacity, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: false,
+          }),
+          Animated.timing(attackBorderOpacity, {
+            toValue: 0.5,
+            duration: 500,
+            useNativeDriver: false,
+          }),
+        ])
+      );
+
+      pulseAnimation.start();
+
+      // Take damage over time while being attacked (0.5s of damage per second)
+      const damageInterval = setInterval(() => {
+        setPlayerHealth((prev) => {
+          const newHealth = Math.max(0, prev - 500); // 0.5 seconds of damage per interval
+          if (newHealth === 0) {
+            setBeingAttacked(false);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            Alert.alert(
+              'You Died!',
+              'You were eliminated by your attacker!',
+              [{ text: 'OK' }]
+            );
+          }
+          return newHealth;
+        });
+      }, 1000); // Apply damage every second
+
+      return () => {
+        pulseAnimation.stop();
+        attackBorderOpacity.setValue(0);
+        clearInterval(damageInterval);
+      };
+    } else {
+      attackBorderOpacity.setValue(0);
+    }
+  }, [beingAttacked, attackBorderOpacity]);
+
+  // Animate swords when attack is unlocked
+  useEffect(() => {
+    if (assassinateUnlocked && targetInRange) {
+      // Pulsing scale animation
+      const scaleAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(swordScale, {
+            toValue: 1.2,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(swordScale, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+      // Rotating animation (subtle swing back and forth)
+      const rotateAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(swordRotation, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(swordRotation, {
+            toValue: -1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(swordRotation, {
+            toValue: 0,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+      scaleAnimation.start();
+      rotateAnimation.start();
+
+      return () => {
+        scaleAnimation.stop();
+        rotateAnimation.stop();
+        swordScale.setValue(1);
+        swordRotation.setValue(0);
+      };
+    } else {
+      // Reset animations when not unlocked
+      swordScale.setValue(1);
+      swordRotation.setValue(0);
+    }
+  }, [assassinateUnlocked, targetInRange, swordScale, swordRotation]);
+
   function startBLEScan() {
     if (scanning) return;
 
@@ -248,6 +365,39 @@ export default function BLEScanning() {
     setBeingAttacked(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+    // Show shield animation
+    setShowShield(true);
+    shieldScale.setValue(0);
+    shieldOpacity.setValue(1);
+
+    // Animate shield: pop in, hold, then fade out
+    Animated.sequence([
+      // Pop in
+      Animated.spring(shieldScale, {
+        toValue: 1,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      // Hold for a moment
+      Animated.delay(800),
+      // Fade out
+      Animated.parallel([
+        Animated.timing(shieldOpacity, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shieldScale, {
+          toValue: 1.2,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(() => {
+      setShowShield(false);
+    });
+
     // TODO: Send dodge event to server/attacker
     // This should notify the attacker that their attack was dodged
     // The attacker will need to restart by marking target again
@@ -305,7 +455,7 @@ export default function BLEScanning() {
     }).start();
 
     // Start assassinate timer - after 2 seconds, unlock attack button
-    dodgeTimer.current = setTimeout(() => {
+    assassinateTimer.current = setTimeout(() => {
       setAssassinateUnlocked(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }, ASSASSINATE_HOLD_DURATION);
@@ -314,9 +464,9 @@ export default function BLEScanning() {
   function onAssassinatePressEnd() {
     setIsAssassinatePressed(false);
 
-    if (dodgeTimer.current) {
-      clearTimeout(dodgeTimer.current);
-      dodgeTimer.current = null;
+    if (assassinateTimer.current) {
+      clearTimeout(assassinateTimer.current);
+      assassinateTimer.current = null;
     }
 
     // Reset assassinate progress animation
@@ -339,14 +489,21 @@ export default function BLEScanning() {
       return;
     }
 
+    // Bug fix #3: Prevent attacking if opponent is already dead
+    if (opponentHealth <= 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+
     setIsPressed(true);
     setAttackStartTime(Date.now());
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
-    // Animate attack progress
+    // Animate attack progress - duration based on opponent's REMAINING health
+    // Bug fix #3: Ensure minimum duration of 100ms to prevent animation issues
     Animated.timing(pressProgress, {
       toValue: 1,
-      duration: MAX_HEALTH, // Full duration equals max health
+      duration: Math.max(100, opponentHealth), // Duration equals opponent's current health (min 100ms)
       useNativeDriver: false,
     }).start();
   }
@@ -362,8 +519,12 @@ export default function BLEScanning() {
     setOpponentHealth((prevHealth) => {
       const newHealth = Math.max(0, prevHealth - damageDealt);
 
-      // Check if opponent is eliminated
+      // Bug fix #5: Stop progress bar animation immediately when target is eliminated
       if (newHealth === 0) {
+        // Stop the animation immediately
+        pressProgress.stopAnimation();
+        pressProgress.setValue(0);
+
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert(
           'Target Eliminated!',
@@ -379,7 +540,7 @@ export default function BLEScanning() {
     setIsPressed(false);
     setAttackStartTime(null);
 
-    // Reset progress animation
+    // Reset progress animation (only if not already reset by elimination)
     Animated.timing(pressProgress, {
       toValue: 0,
       duration: 200,
@@ -417,6 +578,28 @@ export default function BLEScanning() {
   const playerHealthPercent = (playerHealth / MAX_HEALTH) * 100;
   const opponentHealthPercent = (opponentHealth / MAX_HEALTH) * 100;
 
+  // Sword animation interpolations
+  const swordRotationDegrees = swordRotation.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: ['-15deg', '0deg', '15deg'],
+  });
+
+  // Calculate border color based on health (yellow -> orange -> red)
+  const getBorderColor = () => {
+    const healthPercent = (playerHealth / MAX_HEALTH) * 100;
+
+    if (healthPercent > 66) {
+      // High health: Yellow
+      return '#FFD700';
+    } else if (healthPercent > 33) {
+      // Medium health: Orange
+      return '#FF8C00';
+    } else {
+      // Low health: Red
+      return '#FF0000';
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <ScrollView
@@ -425,6 +608,12 @@ export default function BLEScanning() {
         showsVerticalScrollIndicator={true}
       >
         <View style={styles.header}>
+          {/* Optional: Add logo image here */}
+          {/* <Image
+            source={require('@/assets/images/logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          /> */}
           <Text style={[styles.title, { color: textColor }]}>Digital Assassins</Text>
           <Text style={[styles.subtitle, { color: textColor }]}>Your Target Is: NIMA. FINISH HIM</Text>
         </View>
@@ -597,6 +786,25 @@ export default function BLEScanning() {
             },
           ]}
         >
+          {/* Animated Crossed Swords Icon */}
+          {assassinateUnlocked && targetInRange && (
+            <View style={styles.swordsContainer}>
+              <Animated.Text
+                style={[
+                  styles.swordIcon,
+                  {
+                    transform: [
+                      { rotate: swordRotationDegrees },
+                      { scale: swordScale },
+                    ],
+                  },
+                ]}
+              >
+                ⚔️
+              </Animated.Text>
+            </View>
+          )}
+
           <Text style={styles.buttonText}>
             {!assassinateUnlocked
               ? 'MARK TARGET FIRST'
@@ -685,6 +893,38 @@ export default function BLEScanning() {
         </TouchableOpacity>
       </View>
       </ScrollView>
+
+      {/* Attack Border Glow - appears when being attacked */}
+      {beingAttacked && (
+        <Animated.View
+          style={[
+            styles.attackBorder,
+            {
+              borderColor: getBorderColor(),
+              opacity: attackBorderOpacity,
+            },
+          ]}
+          pointerEvents="none"
+        />
+      )}
+
+      {/* Shield Animation Overlay - appears when dodge is successful */}
+      {showShield && (
+        <View style={styles.shieldOverlay}>
+          <Animated.View
+            style={[
+              styles.shieldContainer,
+              {
+                transform: [{ scale: shieldScale }],
+                opacity: shieldOpacity,
+              },
+            ]}
+          >
+            <Text style={styles.shieldIcon}>🛡️</Text>
+            <Text style={styles.shieldText}>BLOCKED!</Text>
+          </Animated.View>
+        </View>
+      )}
     </View>
   );
 }
@@ -704,6 +944,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 40,
     marginBottom: 20,
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    marginBottom: 15,
   },
   title: {
     fontSize: 28,
@@ -813,6 +1058,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
+  swordsContainer: {
+    position: 'absolute',
+    top: 10,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swordIcon: {
+    fontSize: 40,
+    textAlign: 'center',
+  },
   progressBarContainer: {
     width: '80%',
     height: 8,
@@ -869,5 +1126,43 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 13,
+  },
+  attackBorder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: 8,
+    borderRadius: 0,
+    zIndex: 999,
+  },
+  shieldOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    zIndex: 1000,
+  },
+  shieldContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shieldIcon: {
+    fontSize: 120,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  shieldText: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#007AFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 5,
   },
 });
