@@ -34,7 +34,7 @@ interface DeviceInfo {
 }
 
 export default function BLEScanning() {
-  const [bleState, setBleState] = useState<State>(State.Unknown);
+  const [, setBleState] = useState<State>(State.Unknown);
   const [scanning, setScanning] = useState(false);
   const [nearbyDevices, setNearbyDevices] = useState<Record<string, DeviceInfo>>({});
   const [isPressed, setIsPressed] = useState(false);
@@ -83,7 +83,6 @@ export default function BLEScanning() {
   // Theme colors
   const backgroundColor = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
-  const primaryColor = useThemeColor({}, 'primary');
   const dangerColor = useThemeColor({}, 'danger');
 
   // Initialize BLE manager
@@ -340,54 +339,6 @@ export default function BLEScanning() {
     }
   }, [assassinateUnlocked, targetInRange, swordScale, swordRotation]);
 
-  function startBLEScan() {
-    if (scanning) return;
-
-    if (bleState !== 'PoweredOn') {
-      Alert.alert(
-        'Bluetooth Required',
-        'Please enable Bluetooth to play the game.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    setScanning(true);
-
-    manager.startDeviceScan(
-      BLE_SCAN_SERVICE_UUID ? [BLE_SCAN_SERVICE_UUID] : null,
-      { allowDuplicates: true },
-      (error, scannedDevice) => {
-        if (error) {
-          console.warn('BLE scan error:', error.message);
-          return;
-        }
-
-        if (!scannedDevice) return;
-
-        const id = scannedDevice.id;
-        const rssi = scannedDevice.rssi ?? undefined;
-        const distance = typeof rssi === 'number' ? rssiToDistance(rssi) : undefined;
-
-        setNearbyDevices((prev) => ({
-          ...prev,
-          [id]: {
-            device: scannedDevice,
-            distance,
-            rssi,
-            lastSeen: Date.now(),
-          },
-        }));
-      }
-    );
-  }
-
-  function stopBLEScan() {
-    manager.stopDeviceScan();
-    setScanning(false);
-  }
-
-
   // Dodge button handlers - only for defending
   function onDodgePressStart() {
     if (!beingAttacked) {
@@ -604,19 +555,6 @@ export default function BLEScanning() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
 
-  // Calculate nearby devices within range
-  const devicesInRange = Object.values(nearbyDevices).filter(
-    (device) => typeof device.distance === 'number' && device.distance <= KILL_RADIUS_METERS
-  );
-
-  const closestDevice = Object.values(nearbyDevices).reduce<DeviceInfo | null>((closest, device) => {
-    if (typeof device.distance !== 'number') return closest;
-    if (!closest || (typeof closest.distance === 'number' && device.distance < closest.distance)) {
-      return device;
-    }
-    return closest;
-  }, null);
-
   // Progress bar width
   const progressWidth = pressProgress.interpolate({
     inputRange: [0, 1],
@@ -724,55 +662,6 @@ export default function BLEScanning() {
             {(opponentHealth / 1000).toFixed(1)}s / {MAX_HEALTH / 1000}s
           </Text>
         </View>
-      </View>
-
-      <View style={styles.statusContainer}>
-        <View style={styles.statusRow}>
-          <Text style={[styles.statusLabel, { color: textColor }]}>Bluetooth:</Text>
-          <Text
-            style={[
-              styles.statusValue,
-              { color: bleState === 'PoweredOn' ? primaryColor : dangerColor },
-            ]}
-          >
-            {bleState}
-          </Text>
-        </View>
-
-        <View style={styles.statusRow}>
-          <Text style={[styles.statusLabel, { color: textColor }]}>Scanning:</Text>
-          <Text style={[styles.statusValue, { color: scanning ? primaryColor : textColor }]}>
-            {scanning ? 'Active' : 'Inactive'}
-          </Text>
-        </View>
-
-        <View style={styles.statusRow}>
-          <Text style={[styles.statusLabel, { color: textColor }]}>Devices Nearby:</Text>
-          <Text style={[styles.statusValue, { color: textColor }]}>
-            {Object.keys(nearbyDevices).length}
-          </Text>
-        </View>
-
-        <View style={styles.statusRow}>
-          <Text style={[styles.statusLabel, { color: textColor }]}>In Range:</Text>
-          <Text
-            style={[
-              styles.statusValue,
-              { color: devicesInRange.length > 0 ? primaryColor : textColor },
-            ]}
-          >
-            {devicesInRange.length}
-          </Text>
-        </View>
-
-        {closestDevice && (
-          <View style={styles.statusRow}>
-            <Text style={[styles.statusLabel, { color: textColor }]}>Closest Target:</Text>
-            <Text style={[styles.statusValue, { color: textColor }]}>
-              {closestDevice.distance?.toFixed(1)}m
-            </Text>
-          </View>
-        )}
       </View>
 
       <View style={styles.attackContainer}>
@@ -909,24 +798,6 @@ export default function BLEScanning() {
           Defend: Press DODGE when attacked!
         </Text>
       </View>
-
-      {!scanning && bleState === 'PoweredOn' && (
-        <TouchableOpacity
-          style={[styles.scanButton, { backgroundColor: primaryColor }]}
-          onPress={startBLEScan}
-        >
-          <Text style={styles.scanButtonText}>Start Scanning</Text>
-        </TouchableOpacity>
-      )}
-
-      {scanning && (
-        <TouchableOpacity
-          style={[styles.scanButton, { backgroundColor: '#666' }]}
-          onPress={stopBLEScan}
-        >
-          <Text style={styles.scanButtonText}>Stop Scanning</Text>
-        </TouchableOpacity>
-      )}
 
       {/* TEST BUTTONS - Remove in production */}
       <View style={styles.testButtonContainer}>
