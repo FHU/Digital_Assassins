@@ -75,6 +75,7 @@ export default function BLEScanning() {
   const eliminationScale = useRef(new Animated.Value(0)).current;
   const eliminationOpacity = useRef(new Animated.Value(0)).current;
   const [showElimination, setShowElimination] = useState(false);
+  const [eliminationType, setEliminationType] = useState<'victory' | 'death'>('victory');
 
   // Attack border glow animation
   const attackBorderOpacity = useRef(new Animated.Value(0)).current;
@@ -238,19 +239,40 @@ export default function BLEScanning() {
   // Take damage over time when actively being attacked (not just marked)
   useEffect(() => {
     if (takingDamage) {
-      // Take damage over time while being attacked (0.5s of damage per second)
+      // Take damage over time while being attacked (1s of damage per second)
       const damageInterval = setInterval(() => {
         setPlayerHealth((prev) => {
-          const newHealth = Math.max(0, prev - 500); // 0.5 seconds of damage per interval
+          const newHealth = Math.max(0, prev - 1000); // 1 second of damage per interval
           if (newHealth === 0) {
             setTakingDamage(false);
             setBeingAttacked(false);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            Alert.alert(
-              'You Died!',
-              'You were eliminated by your attacker!',
-              [{ text: 'OK' }]
-            );
+
+            // Show death elimination animation (skull)
+            setEliminationType('death');
+            setShowElimination(true);
+            eliminationScale.setValue(0);
+            eliminationOpacity.setValue(1);
+
+            Animated.sequence([
+              // Burst in
+              Animated.spring(eliminationScale, {
+                toValue: 1,
+                tension: 40,
+                friction: 8,
+                useNativeDriver: true,
+              }),
+              // Hold
+              Animated.delay(1500),
+              // Fade out
+              Animated.timing(eliminationOpacity, {
+                toValue: 0,
+                duration: 500,
+                useNativeDriver: true,
+              }),
+            ]).start(() => {
+              setShowElimination(false);
+            });
           }
           return newHealth;
         });
@@ -260,7 +282,7 @@ export default function BLEScanning() {
         clearInterval(damageInterval);
       };
     }
-  }, [takingDamage]);
+  }, [takingDamage, eliminationScale, eliminationOpacity]);
 
   // Animate swords when attack is unlocked
   useEffect(() => {
@@ -539,7 +561,8 @@ export default function BLEScanning() {
 
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-        // Show elimination animation
+        // Show victory elimination animation (dagger)
+        setEliminationType('victory');
         setShowElimination(true);
         eliminationScale.setValue(0);
         eliminationOpacity.setValue(1);
@@ -992,9 +1015,17 @@ export default function BLEScanning() {
               },
             ]}
           >
-            <Text style={styles.eliminationIcon}>💀</Text>
-            <Text style={styles.eliminationText}>TARGET ELIMINATED!</Text>
-            <Text style={styles.eliminationSubtext}>Your Next Target Is Waiting...</Text>
+            {eliminationType === 'victory' ? (
+              <>
+                <Text style={styles.eliminationIcon}>🗡️</Text>
+                <Text style={[styles.eliminationText, { color: '#FFD700' }]}>ELIMINATED!</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.eliminationIcon}>💀</Text>
+                <Text style={[styles.eliminationText, { color: '#FF0000' }]}>YOU DIED!</Text>
+              </>
+            )}
           </Animated.View>
         </View>
       )}
@@ -1259,14 +1290,6 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 4, height: 4 },
     textShadowRadius: 10,
-    marginBottom: 10,
-  },
-  eliminationSubtext: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#FFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 5,
+    textAlign: 'center',
   },
 });
