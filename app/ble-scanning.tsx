@@ -402,7 +402,7 @@ export default function BLEScanning() {
     // This should notify the attacker that their attack was dodged
     // The attacker will need to restart by marking target again
 
-    Alert.alert('Dodged!', 'You successfully dodged the attack!', [{ text: 'OK' }]);
+    //Alert.alert('Dodged!', 'You successfully dodged the attack!', [{ text: 'OK' }]);
   }
 
   function onDodgePressEnd() {
@@ -788,21 +788,19 @@ export default function BLEScanning() {
         >
           {/* Animated Crossed Swords Icon */}
           {assassinateUnlocked && targetInRange && (
-            <View style={styles.swordsContainer}>
-              <Animated.Text
-                style={[
-                  styles.swordIcon,
-                  {
-                    transform: [
-                      { rotate: swordRotationDegrees },
-                      { scale: swordScale },
-                    ],
-                  },
-                ]}
-              >
-                ⚔️
-              </Animated.Text>
-            </View>
+            <Animated.Text
+              style={[
+                styles.swordIcon,
+                {
+                  transform: [
+                    { rotate: swordRotationDegrees },
+                    { scale: swordScale },
+                  ],
+                },
+              ]}
+            >
+              ⚔️
+            </Animated.Text>
           )}
 
           <Text style={styles.buttonText}>
@@ -1051,20 +1049,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
+    flexDirection: 'column',
+    gap: 8,
   },
   buttonText: {
     color: '#fff',
     fontWeight: '700',
     fontSize: 16,
     textAlign: 'center',
-  },
-  swordsContainer: {
-    position: 'absolute',
-    top: 10,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   swordIcon: {
     fontSize: 40,
