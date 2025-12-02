@@ -46,7 +46,8 @@ export default function BLEScanning() {
 
   // Dodge system
   const [isDodgePressed, setIsDodgePressed] = useState(false);
-  const [beingAttacked, setBeingAttacked] = useState(false); // lights up dodge button
+  const [beingAttacked, setBeingAttacked] = useState(false); // lights up dodge button (warning only)
+  const [takingDamage, setTakingDamage] = useState(false); // actively taking damage
 
   // Assassinate system
   const [isAssassinatePressed, setIsAssassinatePressed] = useState(false);
@@ -204,9 +205,9 @@ export default function BLEScanning() {
     return () => clearInterval(checkInterval);
   }, [nearbyDevices, isPressed, pressProgress]);
 
-  // Animate glowing border when being attacked
+  // Animate glowing border when being attacked or marked
   useEffect(() => {
-    if (beingAttacked) {
+    if (beingAttacked || takingDamage) {
       // Pulsing glow animation (1.5x faster: 500ms / 1.5 = ~333ms)
       const pulseAnimation = Animated.loop(
         Animated.sequence([
@@ -225,11 +226,24 @@ export default function BLEScanning() {
 
       pulseAnimation.start();
 
+      return () => {
+        pulseAnimation.stop();
+        attackBorderOpacity.setValue(0);
+      };
+    } else {
+      attackBorderOpacity.setValue(0);
+    }
+  }, [beingAttacked, takingDamage, attackBorderOpacity]);
+
+  // Take damage over time when actively being attacked (not just marked)
+  useEffect(() => {
+    if (takingDamage) {
       // Take damage over time while being attacked (0.5s of damage per second)
       const damageInterval = setInterval(() => {
         setPlayerHealth((prev) => {
           const newHealth = Math.max(0, prev - 500); // 0.5 seconds of damage per interval
           if (newHealth === 0) {
+            setTakingDamage(false);
             setBeingAttacked(false);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             Alert.alert(
@@ -243,14 +257,10 @@ export default function BLEScanning() {
       }, 1000); // Apply damage every second
 
       return () => {
-        pulseAnimation.stop();
-        attackBorderOpacity.setValue(0);
         clearInterval(damageInterval);
       };
-    } else {
-      attackBorderOpacity.setValue(0);
     }
-  }, [beingAttacked, attackBorderOpacity]);
+  }, [takingDamage]);
 
   // Animate swords when attack is unlocked
   useEffect(() => {
@@ -474,12 +484,9 @@ export default function BLEScanning() {
       assassinateTimer.current = null;
     }
 
-    // Reset assassinate progress animation
-    Animated.timing(assassinateProgress, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: false,
-    }).start();
+    // Stop and reset assassinate progress animation immediately
+    assassinateProgress.stopAnimation();
+    assassinateProgress.setValue(0);
   }
 
   // Attack button handlers - deals damage over time (only works if assassinate was held first)
@@ -565,12 +572,11 @@ export default function BLEScanning() {
     setIsPressed(false);
     setAttackStartTime(null);
 
-    // Reset progress animation (only if not already reset by elimination)
-    Animated.timing(pressProgress, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: false,
-    }).start();
+    // Stop and reset progress animation immediately (only if not already reset by elimination)
+    if (opponentHealth > 0) {
+      pressProgress.stopAnimation();
+      pressProgress.setValue(0);
+    }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
@@ -921,12 +927,12 @@ export default function BLEScanning() {
           style={[styles.testButton, { backgroundColor: dangerColor }]}
           onPress={() => {
             // Simulate being attacked for 2 seconds (with damage)
-            setBeingAttacked(true);
+            setTakingDamage(true);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
             // Stop attack after 2 seconds
             setTimeout(() => {
-              setBeingAttacked(false);
+              setTakingDamage(false);
             }, 2000);
           }}
         >
@@ -942,8 +948,8 @@ export default function BLEScanning() {
       </View>
       </ScrollView>
 
-      {/* Attack Border Glow - appears when being attacked */}
-      {beingAttacked && (
+      {/* Attack Border Glow - appears when being attacked or marked */}
+      {(beingAttacked || takingDamage) && (
         <Animated.View
           style={[
             styles.attackBorder,
@@ -987,7 +993,7 @@ export default function BLEScanning() {
             ]}
           >
             <Text style={styles.eliminationIcon}>💀</Text>
-            <Text style={styles.eliminationText}>ELIMINATED!</Text>
+            <Text style={styles.eliminationText}>TARGET ELIMINATED!</Text>
             <Text style={styles.eliminationSubtext}>Your Next Target Is Waiting...</Text>
           </Animated.View>
         </View>
