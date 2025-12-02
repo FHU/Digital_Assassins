@@ -38,7 +38,7 @@ export default function BLEScanning() {
   const [scanning, setScanning] = useState(false);
   const [nearbyDevices, setNearbyDevices] = useState<Record<string, DeviceInfo>>({});
   const [isPressed, setIsPressed] = useState(false);
-  const [targetInRange, setTargetInRange] = useState(false);
+  const [targetInRange, setTargetInRange] = useState(true); // Default to true for testing
 
   // Health system
   const [playerHealth, setPlayerHealth] = useState(MAX_HEALTH);
@@ -69,6 +69,11 @@ export default function BLEScanning() {
   const shieldScale = useRef(new Animated.Value(0)).current;
   const shieldOpacity = useRef(new Animated.Value(0)).current;
   const [showShield, setShowShield] = useState(false);
+
+  // Elimination animation
+  const eliminationScale = useRef(new Animated.Value(0)).current;
+  const eliminationOpacity = useRef(new Animated.Value(0)).current;
+  const [showElimination, setShowElimination] = useState(false);
 
   // Attack border glow animation
   const attackBorderOpacity = useRef(new Animated.Value(0)).current;
@@ -202,17 +207,17 @@ export default function BLEScanning() {
   // Animate glowing border when being attacked
   useEffect(() => {
     if (beingAttacked) {
-      // Pulsing glow animation
+      // Pulsing glow animation (1.5x faster: 500ms / 1.5 = ~333ms)
       const pulseAnimation = Animated.loop(
         Animated.sequence([
           Animated.timing(attackBorderOpacity, {
             toValue: 1,
-            duration: 500,
+            duration: 333,
             useNativeDriver: false,
           }),
           Animated.timing(attackBorderOpacity, {
             toValue: 0.5,
-            duration: 500,
+            duration: 333,
             useNativeDriver: false,
           }),
         ])
@@ -526,11 +531,31 @@ export default function BLEScanning() {
         pressProgress.setValue(0);
 
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert(
-          'Target Eliminated!',
-          'You have successfully eliminated your target!',
-          [{ text: 'OK' }]
-        );
+
+        // Show elimination animation
+        setShowElimination(true);
+        eliminationScale.setValue(0);
+        eliminationOpacity.setValue(1);
+
+        Animated.sequence([
+          // Burst in
+          Animated.spring(eliminationScale, {
+            toValue: 1,
+            tension: 40,
+            friction: 8,
+            useNativeDriver: true,
+          }),
+          // Hold
+          Animated.delay(1500),
+          // Fade out
+          Animated.timing(eliminationOpacity, {
+            toValue: 0,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setShowElimination(false);
+        });
       }
 
       return newHealth;
@@ -600,6 +625,19 @@ export default function BLEScanning() {
     }
   };
 
+  // Calculate health bar color based on percentage
+  const getHealthBarColor = (healthPercent: number) => {
+    if (healthPercent > 75) {
+      return '#4CAF50'; // Green
+    } else if (healthPercent > 50) {
+      return '#FFD700'; // Yellow
+    } else if (healthPercent > 25) {
+      return '#FF8C00'; // Orange
+    } else {
+      return '#FF0000'; // Red
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <ScrollView
@@ -629,7 +667,7 @@ export default function BLEScanning() {
                 styles.healthBar,
                 {
                   width: `${playerHealthPercent}%`,
-                  backgroundColor: primaryColor,
+                  backgroundColor: getHealthBarColor(playerHealthPercent),
                 },
               ]}
             />
@@ -648,7 +686,7 @@ export default function BLEScanning() {
                 styles.healthBar,
                 {
                   width: `${opponentHealthPercent}%`,
-                  backgroundColor: dangerColor,
+                  backgroundColor: getHealthBarColor(opponentHealthPercent),
                 },
               ]}
             />
@@ -866,21 +904,33 @@ export default function BLEScanning() {
         <TouchableOpacity
           style={[styles.testButton, { backgroundColor: '#FF6B00' }]}
           onPress={() => {
+            // Simulate being marked (2 second window to dodge, NO damage)
             setBeingAttacked(true);
-            setTimeout(() => setBeingAttacked(false), DODGE_WINDOW);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+
+            // Automatically stop after 2 seconds if not dodged
+            setTimeout(() => {
+              setBeingAttacked(false);
+            }, DODGE_WINDOW);
           }}
         >
-          <Text style={styles.testButtonText}>Test: Incoming Attack</Text>
+          <Text style={styles.testButtonText}>Test: Being Marked</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.testButton, { backgroundColor: dangerColor }]}
           onPress={() => {
-            setPlayerHealth((prev) => Math.max(0, prev - 1000));
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            // Simulate being attacked for 2 seconds (with damage)
+            setBeingAttacked(true);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+
+            // Stop attack after 2 seconds
+            setTimeout(() => {
+              setBeingAttacked(false);
+            }, 2000);
           }}
         >
-          <Text style={styles.testButtonText}>Test: Take 1s Damage</Text>
+          <Text style={styles.testButtonText}>Test: Being Attacked</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -920,6 +970,25 @@ export default function BLEScanning() {
           >
             <Text style={styles.shieldIcon}>🛡️</Text>
             <Text style={styles.shieldText}>BLOCKED!</Text>
+          </Animated.View>
+        </View>
+      )}
+
+      {/* Elimination Animation Overlay - appears when opponent is eliminated */}
+      {showElimination && (
+        <View style={styles.eliminationOverlay}>
+          <Animated.View
+            style={[
+              styles.eliminationContainer,
+              {
+                transform: [{ scale: eliminationScale }],
+                opacity: eliminationOpacity,
+              },
+            ]}
+          >
+            <Text style={styles.eliminationIcon}>💀</Text>
+            <Text style={styles.eliminationText}>ELIMINATED!</Text>
+            <Text style={styles.eliminationSubtext}>Your Next Target Is Waiting...</Text>
           </Animated.View>
         </View>
       )}
@@ -1125,7 +1194,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderWidth: 8,
+    borderWidth: 12,
     borderRadius: 0,
     zIndex: 999,
   },
@@ -1145,15 +1214,52 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   shieldIcon: {
-    fontSize: 120,
+    fontSize: 200,
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: 20,
   },
   shieldText: {
-    fontSize: 32,
+    fontSize: 48,
     fontWeight: '700',
     color: '#007AFF',
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 3, height: 3 },
+    textShadowRadius: 8,
+  },
+  eliminationOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1001,
+  },
+  eliminationContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eliminationIcon: {
+    fontSize: 180,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  eliminationText: {
+    fontSize: 56,
+    fontWeight: '700',
+    color: '#FF0000',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 4, height: 4 },
+    textShadowRadius: 10,
+    marginBottom: 10,
+  },
+  eliminationSubtext: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#FFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 5,
   },
