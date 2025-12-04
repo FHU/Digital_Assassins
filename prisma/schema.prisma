@@ -1,0 +1,45 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Player{
+  id  Int @id @default(autoincrement())
+  device  Device @relation(fields: [], references: [id])
+  healthRemaining Float
+  target  Player @relation(fields: [], references: [id])
+  attacker  Player @relation(fields: [], references: [id])//optional
+  username  String
+  kills Int
+  createdAt DateTime  @default(now())
+}
+
+model Device{
+  id  Int @id @default(autoincrement())
+  bluetoothStatus Boolean
+  player  Player  @relation(fields: [], references: [id])
+  createdAt DateTime  @default(now())
+}
+
+model Lobby{
+  id  Int @id @default(autoincrement())
+  lobbyCode String
+  host Device @relation(fields: [], references: [id])
+  playerList Player[]
+  gameTimeLimit DateTime
+  health  Float
+  lobbyName String
+  playerLimit Int
+  deviceType  String //optional
+  createdAt DateTime  @default(now())
+}
