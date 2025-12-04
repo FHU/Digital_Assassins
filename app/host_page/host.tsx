@@ -122,7 +122,7 @@ export default function HostScreen() {
       <View style={styles.bottomButtonContainer}>
         <TouchableOpacity
           style={styles.startGameButton}
-          onPress={() => {}}
+          onPress={() => router.push("/ble-scanning")}
         >
           <Text style={styles.buttonText}>Start Game</Text>
         </TouchableOpacity>
