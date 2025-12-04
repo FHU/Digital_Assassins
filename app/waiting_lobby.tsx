@@ -1,5 +1,5 @@
 import { useThemeColor } from "@/hooks/useThemeColor";
-import { getLobbyByCode } from "@/services/LobbyStore";
+import { getLobbyByCode, Participant } from "@/services/LobbyStore";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Participant } from "@/services/LobbyStore";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function WaitingLobbyScreen() {
   const router = useRouter();
@@ -201,6 +201,7 @@ export default function WaitingLobbyScreen() {
 
   if (!code || !username) {
     return (
+    <SafeAreaView> 
       <View style={[styles.container]}>
         <View style={styles.headerCard}>
           <Text style={[styles.title, { color: dangerColor }]}>
@@ -219,6 +220,7 @@ export default function WaitingLobbyScreen() {
           </TouchableOpacity>
         </View>
       </View>
+    </SafeAreaView>
     );
   }
 
