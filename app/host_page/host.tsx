@@ -1,5 +1,5 @@
 import { useThemeColor } from "@/hooks/useThemeColor";
-import databaseLobbyStore from "@/services/DatabaseLobbyStore";
+import supabaseLobbyStore from "@/services/SupabaseLobbyStore";
 import { useDeviceId } from "@/hooks/useDeviceId";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -40,13 +40,13 @@ export default function HostScreen() {
       setIsLoading(true);
 
       // Check if there's already an active lobby for this device
-      const existingLobby = await databaseLobbyStore.getCurrentActiveLobby(deviceId);
+      const existingLobby = await supabaseLobbyStore.getCurrentActiveLobby(deviceId);
 
       if (existingLobby) {
         setLobby(existingLobby);
       } else {
         // Create a new lobby
-        const newLobby = await databaseLobbyStore.createLobby(
+        const newLobby = await supabaseLobbyStore.createLobby(
           deviceId,
           "Host",
           "Game Night"

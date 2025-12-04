@@ -1,5 +1,5 @@
 import { useThemeColor } from "@/hooks/useThemeColor";
-import databaseLobbyStore from "@/services/DatabaseLobbyStore";
+import supabaseLobbyStore from "@/services/SupabaseLobbyStore";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -34,7 +34,7 @@ export default function WaitingLobbyScreen() {
     if (!code) return;
 
     try {
-      const lobby = await databaseLobbyStore.getLobbyByCode(code);
+      const lobby = await supabaseLobbyStore.getLobbyByCode(code);
       if (lobby) {
         setPlayers(lobby.players);
         setLobbyName(lobby.name);
