@@ -77,7 +77,7 @@ export default function HomePage() {
   return (
     <View style={styles.container}>
       <View style={styles.titleContainer}>
-        <Text style={styles.title}>Digital Assassin</Text>
+        <Text style={styles.title}>Digital Assassins</Text>
         <Text style={styles.subtitle}>Play Covert Games with Friends</Text>
       </View>
 
