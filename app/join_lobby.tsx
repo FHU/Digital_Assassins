@@ -1,7 +1,8 @@
 import { useThemeColor } from "@/hooks/useThemeColor";
-import { addParticipantToLobby, getLobbyByCode } from "@/services/LobbyStore";
+import databaseLobbyStore from "@/services/DatabaseLobbyStore";
+import { useDeviceId } from "@/hooks/useDeviceId";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Alert,
   ScrollView,
@@ -10,10 +11,21 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
+
+interface Lobby {
+  id: number;
+  code: string;
+  name: string;
+  hostUsername: string;
+  players: string[];
+  createdAt: string;
+}
 
 export default function JoinLobbyScreen() {
   const router = useRouter();
+  const deviceId = useDeviceId();
   const { code } = useLocalSearchParams<{ code: string }>();
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
@@ -23,6 +35,30 @@ export default function JoinLobbyScreen() {
 
   const [username, setUsername] = useState("");
   const [isJoining, setIsJoining] = useState(false);
+  const [lobby, setLobby] = useState<Lobby | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch lobby data on mount
+  useEffect(() => {
+    fetchLobby();
+  }, [code]);
+
+  const fetchLobby = async () => {
+    if (!code) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const lobbyData = await databaseLobbyStore.getLobbyByCode(code);
+      setLobby(lobbyData);
+    } catch (error) {
+      console.error('Error fetching lobby:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const styles = StyleSheet.create({
     container: {
@@ -130,7 +166,14 @@ export default function JoinLobbyScreen() {
     );
   }
 
-  const lobby = getLobbyByCode(code);
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { backgroundColor }]}>
+        <ActivityIndicator size="large" color={tintColor} />
+        <Text style={{ color: textColor, marginTop: 16 }}>Loading lobby...</Text>
+      </View>
+    );
+  }
 
   if (!lobby) {
     return (
@@ -150,7 +193,7 @@ export default function JoinLobbyScreen() {
     );
   }
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     if (!username.trim()) {
       Alert.alert("Username Required", "Please enter a username to join.");
       return;
@@ -158,10 +201,13 @@ export default function JoinLobbyScreen() {
 
     setIsJoining(true);
 
-    // Simulate network delay
-    setTimeout(() => {
-      addParticipantToLobby(code, username.trim());
-      setIsJoining(false);
+    try {
+      // Add player to lobby in database
+      await databaseLobbyStore.addParticipantToLobby(
+        code,
+        deviceId,
+        username.trim()
+      );
 
       Alert.alert("Successfully Joined!", "Waiting for the game to start...", [
         {
@@ -174,7 +220,12 @@ export default function JoinLobbyScreen() {
           },
         },
       ]);
-    }, 500);
+    } catch (error) {
+      console.error('Error joining lobby:', error);
+      Alert.alert("Error", "Failed to join lobby. Please try again.");
+    } finally {
+      setIsJoining(false);
+    }
   };
 
   return (
@@ -231,8 +282,8 @@ export default function JoinLobbyScreen() {
           </View>
 
           <Text style={styles.info}>
-            {lobby.participants.length} player
-            {lobby.participants.length !== 1 ? "s" : ""} in lobby
+            {lobby.players.length} player
+            {lobby.players.length !== 1 ? "s" : ""} in lobby
           </Text>
         </View>
       </ScrollView>
