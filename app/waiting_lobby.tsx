@@ -1,5 +1,5 @@
 import { useThemeColor } from "@/hooks/useThemeColor";
-import { getLobbyByCode, Participant } from "@/services/LobbyStore";
+import databaseLobbyStore from "@/services/DatabaseLobbyStore";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -10,7 +10,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function WaitingLobbyScreen() {
   const router = useRouter();
@@ -25,25 +24,24 @@ export default function WaitingLobbyScreen() {
   const primaryColor = useThemeColor({}, "primary");
   const dangerColor = useThemeColor({}, "danger");
 
-  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [players, setPlayers] = useState<string[]>([]);
   const [lobbyName, setLobbyName] = useState("");
   const [hostName, setHostName] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Refresh lobby data
-  const refreshLobby = useCallback(() => {
+  // Refresh lobby data from database
+  const refreshLobby = useCallback(async () => {
     if (!code) return;
 
-    const lobby = getLobbyByCode(code);
-    if (lobby) {
-      setParticipants(lobby.participants);
-      setLobbyName(lobby.name);
-      setHostName(lobby.hostName);
-
-      // Check if game has started and redirect if it has
-      if (lobby.gameStarted) {
-        router.push("/ble-scanning");
+    try {
+      const lobby = await databaseLobbyStore.getLobbyByCode(code);
+      if (lobby) {
+        setPlayers(lobby.players);
+        setLobbyName(lobby.name);
+        setHostName(lobby.hostUsername);
       }
+    } catch (error) {
+      console.error('Error refreshing lobby:', error);
     }
   }, [code, router]);
 
@@ -59,9 +57,9 @@ export default function WaitingLobbyScreen() {
     }, [refreshLobby])
   );
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setIsRefreshing(true);
-    refreshLobby();
+    await refreshLobby();
     setIsRefreshing(false);
   };
 
@@ -277,21 +275,21 @@ export default function WaitingLobbyScreen() {
         <View style={styles.participantsSection}>
           <Text style={styles.sectionTitle}>Players in Lobby</Text>
           <Text style={styles.participantCount}>
-            {participants.length} player{participants.length !== 1 ? "s" : ""}
+            {players.length} player{players.length !== 1 ? "s" : ""}
           </Text>
 
-          {participants.length === 0 ? (
+          {players.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No players yet</Text>
             </View>
           ) : (
             <View style={styles.participantsList}>
-              {participants.map((participant) => (
-                <View key={participant.id} style={styles.participantCard}>
+              {players.map((playerName) => (
+                <View key={playerName} style={styles.participantCard}>
                   <Text style={styles.participantUsername}>
-                    {participant.username}
+                    {playerName}
                   </Text>
-                  {participant.username === hostName && (
+                  {playerName === hostName && (
                     <Text style={styles.hostBadge}>👑 Host</Text>
                   )}
                 </View>

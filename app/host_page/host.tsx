@@ -1,37 +1,66 @@
 import { useThemeColor } from "@/hooks/useThemeColor";
-import { createLobby, getCurrentActiveLobby, Lobby, startGame } from "@/services/LobbyStore";
+import databaseLobbyStore from "@/services/DatabaseLobbyStore";
+import { useDeviceId } from "@/hooks/useDeviceId";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import LobbyCode from "./lobby_code";
 import LobbyName from "./lobby_name";
 import ParticipantList from "./participant_list";
 
+interface Lobby {
+  id: number;
+  code: string;
+  name: string;
+  hostUsername: string;
+  players: string[];
+  createdAt: string;
+}
+
 export default function HostScreen() {
   const router = useRouter();
+  const deviceId = useDeviceId();
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
   const tintColor = useThemeColor({}, "tint");
 
   const [lobby, setLobby] = useState<Lobby | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Initialize lobby on mount
   useFocusEffect(
     useCallback(() => {
-      // Check if there's already an active lobby
-      const existingLobby = getCurrentActiveLobby();
+      initializeLobby();
+    }, [deviceId])
+  );
+
+  const initializeLobby = async () => {
+    try {
+      setIsLoading(true);
+
+      // Check if there's already an active lobby for this device
+      const existingLobby = await databaseLobbyStore.getCurrentActiveLobby(deviceId);
+
       if (existingLobby) {
         setLobby(existingLobby);
       } else {
         // Create a new lobby
-        const newLobby = createLobby("Host", "Game Night");
+        const newLobby = await databaseLobbyStore.createLobby(
+          deviceId,
+          "Host",
+          "Game Night"
+        );
         setLobby(newLobby);
       }
-    }, [])
-  );
+    } catch (error) {
+      console.error('Error initializing lobby:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  const hostParticipants = lobby?.participants.map((p) => p.username) || [];
+  const hostParticipants = lobby?.players || [];
 
   const styles = StyleSheet.create({
     container: {
@@ -96,10 +125,11 @@ export default function HostScreen() {
   });
 
   // Don't render until lobby is loaded
-  if (!lobby) {
+  if (isLoading || !lobby) {
     return (
       <SafeAreaView style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
-        <Text style={{ color: textColor }}>Initializing lobby...</Text>
+        <ActivityIndicator size="large" color={tintColor} />
+        <Text style={{ color: textColor, marginTop: 16 }}>Initializing lobby...</Text>
       </SafeAreaView>
     );
   }
