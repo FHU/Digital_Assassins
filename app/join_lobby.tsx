@@ -167,9 +167,10 @@ export default function JoinLobbyScreen() {
         {
           text: "OK",
           onPress: () => {
-            // For now, navigate back to home
-            // In the future, this could navigate to a player lobby view
-            router.push("/");
+            // Navigate to the waiting lobby screen
+            router.push(
+              `/waiting_lobby?code=${code}&username=${encodeURIComponent(username.trim())}` as never
+            );
           },
         },
       ]);
