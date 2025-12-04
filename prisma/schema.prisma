@@ -1,8 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Digital Assassins Prisma Schema
+// Handles player data, missions, game states, and target assignment system
 
 generator client {
   provider = "prisma-client"
@@ -13,33 +10,165 @@ datasource db {
   provider = "postgresql"
 }
 
-model Player{
-  playerId  Int @id @default(autoincrement())
-  device  Device @relation(fields: [], references: [deviceId])
-  healthRemaining Float
-  target  Player @relation(fields: [], references: [playerId])
-  attacker  Player @relation(fields: [], references: [playerId])//optional
-  username  String
-  kills Int
-  createdAt DateTime  @default(now())
+// Player model - stores player profile and current game state
+model Player {
+  id                    Int       @id @default(autoincrement())
+  userId                String    @unique // Device/user identifier
+  username              String
+  healthRemaining       Float     @default(100.0)
+  kills                 Int       @default(0)
+  status                String    @default("alive") // "alive" | "eliminated" | "spectator"
+
+  // Target assignment system
+  targetId              Int?      // Who this player needs to eliminate
+  target                Player?   @relation("PlayerToTarget", fields: [targetId], references: [id], onDelete: SetNull)
+  targetedBy            Player[]  @relation("PlayerToTarget") // Players who have this player as their target
+
+  // Attacker tracking (who eliminated this player)
+  attackerId            Int?      // The player who eliminated this player
+  attacker              Player?   @relation("PlayerToAttacker", fields: [attackerId], references: [id], onDelete: SetNull)
+  eliminatedPlayers     Player[]  @relation("PlayerToAttacker") // Players eliminated by this player
+
+  // Lobby assignment
+  lobbyId               Int
+  lobby                 Lobby     @relation("LobbyToPlayer", fields: [lobbyId], references: [id], onDelete: Cascade)
+
+  // Device tracking
+  deviceId              Int?
+  device                Device?   @relation("DeviceToPlayer", fields: [deviceId], references: [id], onDelete: SetNull)
+
+  // Missions and progress
+  missions              Mission[] @relation("PlayerToMission")
+  gameStates            GameState[] @relation("PlayerToGameState")
+
+  // Timestamps
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  eliminatedAt          DateTime?
+
+  @@index([lobbyId])
+  @@index([targetId])
+  @@index([deviceId])
+  @@index([status])
 }
 
-model Device{
-  deviceId  Int @id @default(autoincrement())
-  bluetoothStatus Boolean
-  player  Player  @relation(fields: [], references: [playerId])
-  createdAt DateTime  @default(now())
+// Device model - tracks Bluetooth and device information
+model Device {
+  id                    Int       @id @default(autoincrement())
+  bluetoothId           String    @unique
+  bluetoothStatus       Boolean   @default(false)
+  lastHeartbeat         DateTime  @default(now()) @updatedAt
+
+  // Players on this device
+  players               Player[]  @relation("DeviceToPlayer")
+
+  // Lobbies hosted on this device
+  hostedLobbies         Lobby[]   @relation("LobbyToHost")
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([bluetoothStatus])
 }
 
-model Lobby{
-  lobbyId  Int @id @default(autoincrement())
-  lobbyCode String
-  host Device @relation(fields: [], references: [deviceId])
-  playerList Player[]
-  gameTimeLimit DateTime
-  health  Float
-  lobbyName String
-  playerLimit Int
-  deviceType  String //optional
-  createdAt DateTime  @default(now())
+// Lobby model - represents a game session
+model Lobby {
+  id                    Int       @id @default(autoincrement())
+  lobbyCode             String    @unique @db.VarChar(6)
+  lobbyName             String
+
+  // Host information
+  hostId                Int
+  host                  Device    @relation("LobbyToHost", fields: [hostId], references: [id], onDelete: Restrict)
+
+  // Players in this lobby
+  players               Player[]  @relation("LobbyToPlayer")
+
+  // Missions and game states in this lobby
+  missions              Mission[] @relation("LobbyToMission")
+  gameStates            GameState[] @relation("LobbyToGameState")
+
+  // Game configuration
+  gameTimeLimit         DateTime
+  initialHealth         Float     @default(100.0)
+  playerLimit           Int       @default(10)
+  status                String    @default("waiting") // "waiting" | "started" | "ended"
+
+  // Timestamps
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  startedAt             DateTime?
+  endedAt               DateTime?
+
+  @@index([lobbyCode])
+  @@index([status])
+}
+
+// Mission model - tracks individual missions/objectives
+model Mission {
+  id                    Int       @id @default(autoincrement())
+  playerId              Int
+  player                Player    @relation("PlayerToMission", fields: [playerId], references: [id], onDelete: Cascade)
+
+  lobbyId               Int
+  lobby                 Lobby     @relation("LobbyToMission", fields: [lobbyId], references: [id], onDelete: Cascade)
+
+  title                 String
+  description           String?
+  missionType           String    // "elimination" | "survival" | "collection" | etc.
+  status                String    @default("active") // "active" | "completed" | "failed"
+  progress              Float     @default(0.0) // 0-100 percentage
+
+  // Mission-specific data
+  targetPlayerIdForMission Int?   // If mission involves a specific target
+  metadata              String?   @db.Text // JSON string for flexible mission data
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  completedAt           DateTime?
+
+  @@index([playerId])
+  @@index([lobbyId])
+  @@index([status])
+}
+
+// GameState model - tracks game progress and statistics
+model GameState {
+  id                    Int       @id @default(autoincrement())
+  playerId              Int
+  player                Player    @relation("PlayerToGameState", fields: [playerId], references: [id], onDelete: Cascade)
+
+  lobbyId               Int
+  lobby                 Lobby     @relation("LobbyToGameState", fields: [lobbyId], references: [id], onDelete: Cascade)
+
+  // Timestamps for session tracking
+  sessionStartTime      DateTime
+  lastUpdateTime        DateTime  @updatedAt
+
+  // Game statistics
+  eliminations          Int       @default(0)
+  timeSurvived          Int       @default(0) // in seconds
+  distanceTraveled      Float     @default(0.0)
+  accuracy              Float     @default(0.0) // 0-100
+
+  // Current state
+  currentTarget         Int?      // Current target ID at this point in time
+  isAlive               Boolean   @default(true)
+  lastKnownLocation     String?   @db.Text // JSON string with lat/long
+
+  createdAt             DateTime  @default(now())
+
+  @@index([playerId])
+  @@index([lobbyId])
+  @@index([isAlive])
+}
+
+// Add relation for Lobby-Device (host device)
+model Lobby_Device {
+  lobbyId               Int
+  deviceId              Int
+
+  @@id([lobbyId, deviceId])
+
+  // Note: Using a junction table for potential future many-to-many needs
 }
