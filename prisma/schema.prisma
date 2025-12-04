@@ -14,27 +14,27 @@ datasource db {
 }
 
 model Player{
-  id  Int @id @default(autoincrement())
-  device  Device @relation(fields: [], references: [id])
+  playerId  Int @id @default(autoincrement())
+  device  Device @relation(fields: [], references: [deviceId])
   healthRemaining Float
-  target  Player @relation(fields: [], references: [id])
-  attacker  Player @relation(fields: [], references: [id])//optional
+  target  Player @relation(fields: [], references: [playerId])
+  attacker  Player @relation(fields: [], references: [playerId])//optional
   username  String
   kills Int
   createdAt DateTime  @default(now())
 }
 
 model Device{
-  id  Int @id @default(autoincrement())
+  deviceId  Int @id @default(autoincrement())
   bluetoothStatus Boolean
-  player  Player  @relation(fields: [], references: [id])
+  player  Player  @relation(fields: [], references: [playerId])
   createdAt DateTime  @default(now())
 }
 
 model Lobby{
-  id  Int @id @default(autoincrement())
+  lobbyId  Int @id @default(autoincrement())
   lobbyCode String
-  host Device @relation(fields: [], references: [id])
+  host Device @relation(fields: [], references: [deviceId])
   playerList Player[]
   gameTimeLimit DateTime
   health  Float
