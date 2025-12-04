@@ -1,5 +1,5 @@
 import { useThemeColor } from "@/hooks/useThemeColor";
-import { createLobby, getCurrentActiveLobby, Lobby } from "@/services/LobbyStore";
+import { createLobby, getCurrentActiveLobby, Lobby, startGame } from "@/services/LobbyStore";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -122,7 +122,12 @@ export default function HostScreen() {
       <View style={styles.bottomButtonContainer}>
         <TouchableOpacity
           style={styles.startGameButton}
-          onPress={() => router.push("/ble-scanning")}
+          onPress={() => {
+            if (lobby) {
+              startGame(lobby.code);
+            }
+            router.push("/ble-scanning");
+          }}
         >
           <Text style={styles.buttonText}>Start Game</Text>
         </TouchableOpacity>

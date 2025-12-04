@@ -39,8 +39,13 @@ export default function WaitingLobbyScreen() {
       setParticipants(lobby.participants);
       setLobbyName(lobby.name);
       setHostName(lobby.hostName);
+
+      // Check if game has started and redirect if it has
+      if (lobby.gameStarted) {
+        router.push("/ble-scanning");
+      }
     }
-  }, [code]);
+  }, [code, router]);
 
   // Set up polling when screen is focused
   useFocusEffect(
