@@ -170,31 +170,29 @@ export async function getLobbyByCode(code: string) {
   try {
     const { data: lobby, error } = await supabase
       .from('lobby')
-      .select(
-        `
-        id,
-        lobbyCode,
-        lobbyName,
-        createdAt,
-        Player (
-          username
-        )
-      `,
-      )
+      .select('id, lobbyCode, lobbyName, createdAt')
       .eq('lobbyCode', code.toUpperCase())
       .single();
 
     if (error) throw error;
     if (!lobby) return null;
 
-    const players = lobby.Player?.map((p: any) => p.username) || [];
+    // Fetch players separately
+    const { data: players, error: playersError } = await supabase
+      .from('player')
+      .select('username')
+      .eq('lobbyId', lobby.id);
+
+    if (playersError) throw playersError;
+
+    const playerNames = players?.map((p: any) => p.username) || [];
 
     return {
       id: lobby.id,
       code: lobby.lobbyCode,
       name: lobby.lobbyName,
-      hostUsername: players[0] || 'Unknown',
-      players,
+      hostUsername: playerNames[0] || 'Unknown',
+      players: playerNames,
       createdAt: lobby.createdAt,
     };
   } catch (error) {
@@ -290,17 +288,7 @@ export async function getCurrentActiveLobby(deviceId: string) {
     // Get most recent hosted lobby
     const { data: lobby, error } = await supabase
       .from('lobby')
-      .select(
-        `
-        id,
-        lobbyCode,
-        lobbyName,
-        createdAt,
-        Player (
-          username
-        )
-      `,
-      )
+      .select('id, lobbyCode, lobbyName, createdAt')
       .eq('hostId', device.id)
       .in('status', ['waiting', 'started'])
       .order('createdAt', { ascending: false })
@@ -314,14 +302,22 @@ export async function getCurrentActiveLobby(deviceId: string) {
 
     if (!lobby) return null;
 
-    const players = lobby.Player?.map((p: any) => p.username) || [];
+    // Fetch players separately
+    const { data: players, error: playersError } = await supabase
+      .from('player')
+      .select('username')
+      .eq('lobbyId', lobby.id);
+
+    if (playersError) throw playersError;
+
+    const playerNames = players?.map((p: any) => p.username) || [];
 
     return {
       id: lobby.id,
       code: lobby.lobbyCode,
       name: lobby.lobbyName,
-      hostUsername: players[0] || 'Unknown',
-      players,
+      hostUsername: playerNames[0] || 'Unknown',
+      players: playerNames,
       createdAt: lobby.createdAt,
     };
   } catch (error) {
@@ -382,30 +378,33 @@ export async function getAllLobbies() {
   try {
     const { data: lobbies, error } = await supabase
       .from('lobby')
-      .select(
-        `
-        id,
-        lobbyCode,
-        lobbyName,
-        createdAt,
-        Player (
-          username
-        )
-      `,
-      )
+      .select('id, lobbyCode, lobbyName, createdAt')
       .in('status', ['waiting', 'started'])
       .order('createdAt', { ascending: false });
 
     if (error) throw error;
 
-    return (lobbies || []).map((lobby: any) => ({
-      id: lobby.id,
-      code: lobby.lobbyCode,
-      name: lobby.lobbyName,
-      hostUsername: lobby.Player?.[0]?.username || 'Unknown',
-      players: lobby.Player?.map((p: any) => p.username) || [],
-      createdAt: lobby.createdAt,
-    }));
+    // Fetch players for each lobby
+    const lobbiesWithPlayers = await Promise.all(
+      (lobbies || []).map(async (lobby: any) => {
+        const { data: players } = await supabase
+          .from('player')
+          .select('username')
+          .eq('lobbyId', lobby.id);
+
+        const playerNames = players?.map((p: any) => p.username) || [];
+        return {
+          id: lobby.id,
+          code: lobby.lobbyCode,
+          name: lobby.lobbyName,
+          hostUsername: playerNames[0] || 'Unknown',
+          players: playerNames,
+          createdAt: lobby.createdAt,
+        };
+      })
+    );
+
+    return lobbiesWithPlayers;
   } catch (error) {
     console.error('Error getting lobbies:', error);
     return [];
@@ -419,17 +418,24 @@ export async function getLobbyById(lobbyId: number) {
   try {
     const { data: lobby, error } = await supabase
       .from('lobby')
-      .select(
-        `
-        *,
-        Player (*)
-      `,
-      )
+      .select('*')
       .eq('id', lobbyId)
       .single();
 
     if (error) throw error;
-    return lobby;
+
+    // Fetch players separately
+    const { data: players, error: playersError } = await supabase
+      .from('player')
+      .select('*')
+      .eq('lobbyId', lobbyId);
+
+    if (playersError) throw playersError;
+
+    return {
+      ...lobby,
+      Player: players || [],
+    };
   } catch (error) {
     console.error('Error getting lobby by ID:', error);
     return null;

@@ -21,8 +21,7 @@
           "bluetooth-peripheral"
         ]
       },
-      "bundleIdentifier": "com.anonymous.Digital-Assassins",
-      "entitlementFilePath": "./ios/DigitalAssassins/DigitalAssassins.entitlements"
+      "bundleIdentifier": "com.anonymous.Digital-Assassins"
     },
     "android": {
       "adaptiveIcon": {
