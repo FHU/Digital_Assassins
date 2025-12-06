@@ -1,7 +1,7 @@
 import JoinCodeInput from "@/components/JoinCodeInput";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { useBluetooth } from "@/hooks/useBluetooth";
-import databaseLobbyStore from "@/services/DatabaseLobbyStore";
+import supabaseLobbyStore from "@/services/SupabaseLobbyStore";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -35,8 +35,8 @@ export default function JoinScreen() {
     setIsLoading(true);
 
     try {
-      // Query the database for the lobby
-      const lobby = await databaseLobbyStore.getLobbyByCode(code);
+      // Query Supabase for the lobby
+      const lobby = await supabaseLobbyStore.getLobbyByCode(code);
 
       if (!lobby) {
         Alert.alert("Invalid Code", "No lobby found with this code. Try again.");

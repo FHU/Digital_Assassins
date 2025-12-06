@@ -1,5 +1,5 @@
 import { useThemeColor } from "@/hooks/useThemeColor";
-import databaseLobbyStore from "@/services/DatabaseLobbyStore";
+import supabaseLobbyStore from "@/services/SupabaseLobbyStore";
 import { useDeviceId } from "@/hooks/useDeviceId";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState, useEffect } from "react";
@@ -51,7 +51,7 @@ export default function JoinLobbyScreen() {
 
     try {
       setIsLoading(true);
-      const lobbyData = await databaseLobbyStore.getLobbyByCode(code);
+      const lobbyData = await supabaseLobbyStore.getLobbyByCode(code);
       setLobby(lobbyData);
     } catch (error) {
       console.error('Error fetching lobby:', error);
@@ -202,8 +202,8 @@ export default function JoinLobbyScreen() {
     setIsJoining(true);
 
     try {
-      // Add player to lobby in database
-      await databaseLobbyStore.addParticipantToLobby(
+      // Add player to lobby in Supabase
+      await supabaseLobbyStore.addParticipantToLobby(
         code,
         deviceId,
         username.trim()
