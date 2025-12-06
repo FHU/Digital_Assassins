@@ -50,7 +50,7 @@ async function generateUniqueCode(): Promise<string> {
   const maxAttempts = 10;
 
   while (attempts < maxAttempts) {
-    const { data } = await supabase.from('Lobby').select('id').eq('lobbyCode', code).single();
+    const { data } = await supabase.from('lobby').select('id').eq('lobbyCode', code).single();
 
     if (!data) {
       return code;
@@ -74,21 +74,21 @@ export async function getOrCreateDevice(deviceId: string) {
   try {
     // Try to find existing device
     const { data: existingDevice } = await supabase
-      .from('Device')
+      .from('device')
       .select('*')
       .eq('bluetoothId', deviceId)
       .single();
 
     if (existingDevice) {
       // Update heartbeat
-      await supabase.from('Device').update({ lastHeartbeat: new Date().toISOString() }).eq('id', existingDevice.id);
+      await supabase.from('device').update({ lastHeartbeat: new Date().toISOString() }).eq('id', existingDevice.id);
 
       return existingDevice;
     }
 
     // Create new device
     const { data: newDevice, error } = await supabase
-      .from('Device')
+      .from('device')
       .insert([
         {
           bluetoothId: deviceId,
@@ -122,7 +122,7 @@ export async function createLobby(hostDeviceId: string, hostUsername: string, lo
 
     // Create lobby
     const { data: lobby, error: lobbyError } = await supabase
-      .from('Lobby')
+      .from('lobby')
       .insert([
         {
           lobbyCode: code,
@@ -138,7 +138,7 @@ export async function createLobby(hostDeviceId: string, hostUsername: string, lo
     if (lobbyError) throw lobbyError;
 
     // Create host as a player
-    const { error: playerError } = await supabase.from('Player').insert([
+    const { error: playerError } = await supabase.from('player').insert([
       {
         userId: hostDeviceId,
         username: hostUsername,
@@ -169,7 +169,7 @@ export async function createLobby(hostDeviceId: string, hostUsername: string, lo
 export async function getLobbyByCode(code: string) {
   try {
     const { data: lobby, error } = await supabase
-      .from('Lobby')
+      .from('lobby')
       .select(
         `
         id,
@@ -210,7 +210,7 @@ export async function addParticipantToLobby(code: string, deviceId: string, user
   try {
     // Get lobby
     const { data: lobby, error: lobbyError } = await supabase
-      .from('Lobby')
+      .from('lobby')
       .select('id')
       .eq('lobbyCode', code.toUpperCase())
       .single();
@@ -223,7 +223,7 @@ export async function addParticipantToLobby(code: string, deviceId: string, user
 
     // Check if player already exists
     const { data: existingPlayer } = await supabase
-      .from('Player')
+      .from('player')
       .select('id')
       .eq('lobbyId', lobby.id)
       .eq('userId', deviceId)
@@ -231,7 +231,7 @@ export async function addParticipantToLobby(code: string, deviceId: string, user
 
     if (!existingPlayer) {
       // Create new player
-      const { error: playerError } = await supabase.from('Player').insert([
+      const { error: playerError } = await supabase.from('player').insert([
         {
           userId: deviceId,
           username,
@@ -257,14 +257,14 @@ export async function addParticipantToLobby(code: string, deviceId: string, user
 export async function removeParticipantFromLobby(code: string, username: string) {
   try {
     const { data: lobby } = await supabase
-      .from('Lobby')
+      .from('lobby')
       .select('id')
       .eq('lobbyCode', code.toUpperCase())
       .single();
 
     if (!lobby) return null;
 
-    await supabase.from('Player').delete().eq('lobbyId', lobby.id).eq('username', username);
+    await supabase.from('player').delete().eq('lobbyId', lobby.id).eq('username', username);
 
     return getLobbyByCode(code);
   } catch (error) {
@@ -280,7 +280,7 @@ export async function getCurrentActiveLobby(deviceId: string) {
   try {
     // Get device
     const { data: device } = await supabase
-      .from('Device')
+      .from('device')
       .select('id')
       .eq('bluetoothId', deviceId)
       .single();
@@ -289,7 +289,7 @@ export async function getCurrentActiveLobby(deviceId: string) {
 
     // Get most recent hosted lobby
     const { data: lobby, error } = await supabase
-      .from('Lobby')
+      .from('lobby')
       .select(
         `
         id,
@@ -336,7 +336,7 @@ export async function getCurrentActiveLobby(deviceId: string) {
 export async function startLobby(code: string) {
   try {
     const { data: lobby, error } = await supabase
-      .from('Lobby')
+      .from('lobby')
       .update({
         status: 'started',
         startedAt: new Date().toISOString(),
@@ -360,7 +360,7 @@ export async function startLobby(code: string) {
 export async function closeLobby(code: string): Promise<boolean> {
   try {
     const { error } = await supabase
-      .from('Lobby')
+      .from('lobby')
       .update({
         status: 'ended',
         endedAt: new Date().toISOString(),
@@ -381,7 +381,7 @@ export async function closeLobby(code: string): Promise<boolean> {
 export async function getAllLobbies() {
   try {
     const { data: lobbies, error } = await supabase
-      .from('Lobby')
+      .from('lobby')
       .select(
         `
         id,
@@ -418,7 +418,7 @@ export async function getAllLobbies() {
 export async function getLobbyById(lobbyId: number) {
   try {
     const { data: lobby, error } = await supabase
-      .from('Lobby')
+      .from('lobby')
       .select(
         `
         *,

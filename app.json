@@ -12,10 +12,17 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to find and connect with nearby players in the game",
+        "NSBluetoothAlwaysAndWhenInUseUsageDescription": "We need Bluetooth to find and connect with nearby players in the game",
         "NSBluetoothPeripheralUsageDescription": "We need Bluetooth to connect with other players in the game",
-        "NSBluetoothCentralUsageDescription": "We need Bluetooth to connect with other players in the game"
+        "NSBluetoothCentralUsageDescription": "We need Bluetooth to connect with other players in the game",
+        "NSLocalNetworkUsageDescription": "This app uses local network to discover nearby players",
+        "UIBackgroundModes": [
+          "bluetooth-central",
+          "bluetooth-peripheral"
+        ]
       },
-      "bundleIdentifier": "com.anonymous.Digital-Assassins"
+      "bundleIdentifier": "com.anonymous.Digital-Assassins",
+      "entitlementFilePath": "./ios/DigitalAssassins/DigitalAssassins.entitlements"
     },
     "android": {
       "adaptiveIcon": {

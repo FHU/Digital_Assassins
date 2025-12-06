@@ -1,9 +1,10 @@
 import { useThemeColor } from "@/hooks/useThemeColor";
 import supabaseLobbyStore from "@/services/SupabaseLobbyStore";
+import gameService from "@/services/gameService";
 import { useDeviceId } from "@/hooks/useDeviceId";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import LobbyCode from "./lobby_code";
 import LobbyName from "./lobby_name";
@@ -61,6 +62,38 @@ export default function HostScreen() {
   };
 
   const hostParticipants = lobby?.players || [];
+
+  const handleStartGame = async () => {
+    if (!lobby || !lobby.id) {
+      Alert.alert('Error', 'Lobby not found');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      // Assign targets to all players
+      await gameService.assignTargetsForLobby(lobby.id);
+
+      // Update lobby status to "started"
+      const { error } = await supabaseLobbyStore.supabase
+        .from('Lobby')
+        .update({ status: 'started', startedAt: new Date().toISOString() })
+        .eq('id', lobby.id);
+
+      if (error) throw error;
+
+      console.log('✓ Game started! Targets assigned.');
+
+      // Navigate to BLE scanning screen
+      router.push('/ble-scanning');
+    } catch (error) {
+      console.error('Error starting game:', error);
+      Alert.alert('Error', 'Failed to start game. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const styles = StyleSheet.create({
     container: {
@@ -151,10 +184,13 @@ export default function HostScreen() {
 
       <View style={styles.bottomButtonContainer}>
         <TouchableOpacity
-          style={styles.startGameButton}
-          onPress={() => router.push("/ble-scanning")}
+          style={[styles.startGameButton, isLoading && { opacity: 0.5 }]}
+          onPress={handleStartGame}
+          disabled={isLoading}
         >
-          <Text style={styles.buttonText}>Start Game</Text>
+          <Text style={styles.buttonText}>
+            {isLoading ? 'Starting...' : 'Start Game'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity

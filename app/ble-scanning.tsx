@@ -1,4 +1,7 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { useDeviceId } from '@/hooks/useDeviceId';
+import gameService from '@/services/gameService';
+import supabaseLobbyStore, { supabase } from '@/services/SupabaseLobbyStore';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -34,11 +37,20 @@ interface DeviceInfo {
 }
 
 export default function BLEScanning() {
+  const deviceId = useDeviceId();
+
   const [, setBleState] = useState<State>(State.Unknown);
   const [scanning, setScanning] = useState(false);
   const [nearbyDevices, setNearbyDevices] = useState<Record<string, DeviceInfo>>({});
   const [isPressed, setIsPressed] = useState(false);
   const [targetInRange, setTargetInRange] = useState(true); // Default to true for testing
+
+  // Game context
+  const [lobbyId, setLobbyId] = useState<number | null>(null);
+  const [playerId, setPlayerId] = useState<number | null>(null);
+  const [targetPlayerId, setTargetPlayerId] = useState<number | null>(null);
+  const [targetUsername, setTargetUsername] = useState<string | null>(null);
+  const [gameActive, setGameActive] = useState(true);
 
   // Health system
   const [playerHealth, setPlayerHealth] = useState(MAX_HEALTH);
@@ -155,6 +167,59 @@ export default function BLEScanning() {
 
     return () => clearInterval(interval);
   }, []);
+
+  // Initialize game context (lobby, player, target)
+  useEffect(() => {
+    const initializeGame = async () => {
+      try {
+        // Get current active lobby for this device
+        const activeLobby = await supabaseLobbyStore.getCurrentActiveLobby(deviceId);
+        if (!activeLobby || !activeLobby.id) {
+          console.error('No active lobby found');
+          return;
+        }
+
+        setLobbyId(activeLobby.id);
+
+        // Get player record for this device in the lobby
+        const { data: players } = await supabase
+          .from('player')
+          .select('id, username, targetId, healthRemaining')
+          .eq('lobbyId', activeLobby.id)
+          .eq('userId', deviceId)
+          .single();
+
+        if (players) {
+          setPlayerId(players.id);
+          setTargetPlayerId(players.targetId);
+
+          // Get target player info
+          if (players.targetId) {
+            const { data: targetPlayer } = await supabase
+              .from('player')
+              .select('id, username')
+              .eq('id', players.targetId)
+              .single();
+
+            if (targetPlayer) {
+              setTargetUsername(targetPlayer.username);
+            }
+          }
+
+          // Initialize health from database
+          setPlayerHealth(Math.max(0, players.healthRemaining || MAX_HEALTH));
+        }
+
+        console.log('✓ Game initialized:', { lobbyId: activeLobby.id, playerId: players?.id });
+      } catch (error) {
+        console.error('Error initializing game:', error);
+      }
+    };
+
+    if (deviceId) {
+      initializeGame();
+    }
+  }, [deviceId]);
 
   // Check if target is in range (continuous check)
   useEffect(() => {
@@ -493,19 +558,24 @@ export default function BLEScanning() {
     }).start();
   }
 
-  function onKillAttemptPressEnd() {
-    if (!isPressed || attackStartTime === null) return;
+  async function onKillAttemptPressEnd() {
+    if (!isPressed || attackStartTime === null || !playerId || !targetPlayerId || !lobbyId) return;
 
     // Calculate damage dealt (time held in milliseconds)
     const attackEndTime = Date.now();
     const damageDealt = attackEndTime - attackStartTime;
 
-    // Update opponent health (subtract damage, don't go below 0)
-    setOpponentHealth((prevHealth) => {
-      const newHealth = Math.max(0, prevHealth - damageDealt);
+    try {
+      // Apply damage through game service
+      const damageResult = await gameService.damagePlayer(targetPlayerId, damageDealt, playerId);
 
-      // Bug fix #5: Stop progress bar animation immediately when target is eliminated
-      if (newHealth === 0) {
+      // Update opponent health UI
+      setOpponentHealth(Math.max(0, damageResult.healthRemaining));
+
+      // Check if target was eliminated
+      if (damageResult.eliminated && damageResult.eliminationData) {
+        console.log('✓ Target eliminated!', damageResult.eliminationData);
+
         // Stop the animation immediately
         pressProgress.stopAnimation();
         pressProgress.setValue(0);
@@ -534,13 +604,38 @@ export default function BLEScanning() {
             duration: 500,
             useNativeDriver: true,
           }),
-        ]).start(() => {
+        ]).start(async () => {
           setShowElimination(false);
+
+          // Update target to the eliminated player's target (from gameService)
+          if (damageResult.eliminationData?.victim.targetId) {
+            setTargetPlayerId(damageResult.eliminationData.victim.targetId);
+
+            // Get new target info
+            const { data: newTarget } = await supabase
+              .from('player')
+              .select('id, username')
+              .eq('id', damageResult.eliminationData.victim.targetId)
+              .single();
+
+            if (newTarget) {
+              setTargetUsername(newTarget.username);
+            }
+          }
+
+          // Check if game should end
+          const gameStats = await gameService.getLobbyStats(lobbyId);
+          if (gameStats.alivePlayers === 1) {
+            console.log('🎉 Game Over! You are the last player standing!');
+            setGameActive(false);
+            Alert.alert('🎉 Victory!', 'You are the last player standing!');
+          }
         });
       }
-
-      return newHealth;
-    });
+    } catch (error) {
+      console.error('Error applying damage:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
 
     // Reset attack state
     setIsPressed(false);
