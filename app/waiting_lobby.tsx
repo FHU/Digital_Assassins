@@ -43,7 +43,7 @@ export default function WaitingLobbyScreen() {
     } catch (error) {
       console.error('Error refreshing lobby:', error);
     }
-  }, [code]);
+  }, [code, router]);
 
   // Set up polling when screen is focused
   useFocusEffect(
@@ -204,6 +204,7 @@ export default function WaitingLobbyScreen() {
 
   if (!code || !username) {
     return (
+    <SafeAreaView> 
       <View style={[styles.container]}>
         <View style={styles.headerCard}>
           <Text style={[styles.title, { color: dangerColor }]}>
@@ -222,6 +223,7 @@ export default function WaitingLobbyScreen() {
           </TouchableOpacity>
         </View>
       </View>
+    </SafeAreaView>
     );
   }
 

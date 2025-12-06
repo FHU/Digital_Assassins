@@ -21,6 +21,7 @@ export interface Lobby {
   name: string;
   participants: Participant[];
   createdAt: number;
+  gameStarted: boolean;
 }
 
 // In-memory lobby storage (persists during app session)
@@ -68,6 +69,7 @@ export function createLobby(hostName: string, lobbyName: string): Lobby {
       },
     ],
     createdAt: Date.now(),
+    gameStarted: false,
   };
 
   activeLobby.set(code, lobby);
@@ -140,4 +142,16 @@ export function closeLobby(code: string): boolean {
  */
 export function getAllLobbies(): Lobby[] {
   return Array.from(activeLobby.values());
+}
+
+/**
+ * Mark a lobby's game as started (called by host when they start the game)
+ */
+export function startGame(code: string): Lobby | null {
+  const lobby = getLobbyByCode(code);
+  if (!lobby) {
+    return null;
+  }
+  lobby.gameStarted = true;
+  return lobby;
 }
