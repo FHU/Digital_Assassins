@@ -59,3 +59,4 @@ Slowly the circle closes, until there are only two, each having the other as his
 The Digital Assassins app is meant to be a digital version of the game. One person per game of Assassin will be the host. Players will join the host's game lobby by entering a code. The host will be able to start the game.
 
 npm install prisma --save-dev
+just checking
