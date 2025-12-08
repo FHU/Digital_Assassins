@@ -1,7 +1,7 @@
 import JoinCodeInput from "@/components/JoinCodeInput";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { useBluetooth } from "@/hooks/useBluetooth";
-import { getLobbyByCode } from "@/services/LobbyStore";
+import supabaseLobbyStore from "@/services/SupabaseLobbyStore";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -34,24 +34,26 @@ export default function JoinScreen() {
   const processCodeSubmit = async (code: string) => {
     setIsLoading(true);
 
-    // Simulate network delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    try {
+      // Query Supabase for the lobby
+      const lobby = await supabaseLobbyStore.getLobbyByCode(code);
 
-    const lobby = getLobbyByCode(code);
+      if (!lobby) {
+        Alert.alert("Invalid Code", "No lobby found with this code. Try again.");
+        return;
+      }
 
-    if (!lobby) {
+      // Navigate to join_lobby screen with code as param
+      router.push({
+        pathname: "/join_lobby",
+        params: { code },
+      });
+    } catch (error) {
+      console.error('Error looking up lobby:', error);
+      Alert.alert("Error", "Failed to look up lobby. Please try again.");
+    } finally {
       setIsLoading(false);
-      Alert.alert("Invalid Code", "No lobby found with this code. Try again.");
-      return;
     }
-
-    setIsLoading(false);
-
-    // Navigate to join_lobby screen with code as param
-    router.push({
-      pathname: "/join_lobby",
-      params: { code },
-    });
   };
 
   const handleCodeSubmit = async (code: string) => {
