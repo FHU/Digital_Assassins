@@ -27,6 +27,9 @@
         "NSBluetoothCentralUsageDescription": "We need Bluetooth to connect with other players in the game"
       },
       "bundleIdentifier": "com.NIMZ.Digital-Assassins"
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
     },
     "android": {
@@ -44,16 +47,22 @@
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.BLUETOOTH_CONNECT",
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "package": "com.anonymous.DigitalAssassins"
 =======
+=======
+>>>>>>> Stashed changes
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.BLUETOOTH_CONNECT"
       ],
       "package": "com.NIMZ.DigitalAssassins"
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
     },
     "web": {
