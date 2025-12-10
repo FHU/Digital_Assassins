@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Digital Assassins** is a cross-platform React Native multiplayer game application built with Expo, supporting iOS, Android, and web platforms from a single TypeScript codebase. The project uses Expo Router for file-based routing and includes a backend with Prisma for game logic and state management.
+**Digital Assassins** is a cross-platform React Native multiplayer game application built with Expo, supporting iOS, Android, and web platforms from a single TypeScript codebase. The project uses Expo Router for file-based routing and Supabase for backend database and state management.
 
 - **Repository**: https://github.com/FHU/Digital_Assassins.git
 - **Framework**: React Native with Expo (v54.0.13)
@@ -60,8 +60,7 @@ components/                   # Reusable UI components
 
 constants/                    # Shared constants (theme colors, etc.)
 hooks/                        # Custom React hooks
-services/                     # Service layer (API calls, business logic)
-prisma/                       # Prisma schema and migrations
+services/                     # Service layer (API calls, Supabase integration)
 assets/                       # Static images and fonts
 ```
 
@@ -102,7 +101,8 @@ assets/                       # Static images and fonts
 - **expo-haptics** - Haptic feedback
 
 ### Backend & State
-- **Prisma** - Database ORM and schema management
+- **Supabase** - Backend database (PostgreSQL) with real-time capabilities
+- **@supabase/supabase-js** - Supabase JavaScript client for database operations
 - **React Context API** - Global state management (primary approach)
 - Consider Redux, Zustand, or MobX for complex state if needed
 
@@ -151,9 +151,6 @@ assets/                       # Static images and fonts
 - Extends Expo's base config with strict TypeScript settings
 - Path alias: `@/*` maps to project root
 
-### prisma.config.ts
-- Prisma configuration for database schema and client setup
-
 ### eslint.config.js
 - Uses Expo's ESLint configuration
 - Ignores: `dist/*` directory
@@ -201,7 +198,7 @@ assets/                       # Static images and fonts
 - **React Navigation**: https://reactnavigation.org/
 - **React Native Docs**: https://reactnative.dev/
 - **TypeScript React**: https://www.typescriptlang.org/docs/handbook/jsx.html
-- **Prisma Docs**: https://www.prisma.io/docs/
+- **Supabase Docs**: https://supabase.com/docs
 
 ## Platform-Specific Notes
 

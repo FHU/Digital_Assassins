@@ -1,5 +1,5 @@
 import { useThemeColor } from "@/hooks/useThemeColor";
-import supabaseLobbyStore from "@/services/SupabaseLobbyStore";
+import supabaseLobbyStore, { supabase } from "@/services/SupabaseLobbyStore";
 import gameService from "@/services/gameService";
 import { useDeviceId } from "@/hooks/useDeviceId";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -76,7 +76,7 @@ export default function HostScreen() {
       await gameService.assignTargetsForLobby(lobby.id);
 
       // Update lobby status to "started"
-      const { error } = await supabaseLobbyStore.supabase
+      const { error } = await supabase
         .from('Lobby')
         .update({ status: 'started', startedAt: new Date().toISOString() })
         .eq('id', lobby.id);
