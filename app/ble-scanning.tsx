@@ -100,6 +100,12 @@ export default function BLEScanning() {
   const [showElimination, setShowElimination] = useState(false);
   const [eliminationType, setEliminationType] = useState<'victory' | 'death'>('victory');
 
+  // Game countdown
+  const [showCountdown, setShowCountdown] = useState(false);
+  const [countdownValue, setCountdownValue] = useState(3);
+  const countdownScale = useRef(new Animated.Value(0)).current;
+  const countdownOpacity = useRef(new Animated.Value(0)).current;
+
   // Attack border glow animation
   const attackBorderOpacity = useRef(new Animated.Value(0)).current;
 
@@ -375,51 +381,34 @@ export default function BLEScanning() {
             }
           });
 
-          // Assign target: try to use existing targetId, fallback to random player
-          let targetPlayer = null;
-
-          // First, try to use the targetId from database if it exists
-          if (players.targetId) {
-            targetPlayer = allPlayers.find(p => p.id === players.targetId);
-            if (targetPlayer) {
-              console.log(`✓ Using assigned target: ${targetPlayer.username}`);
-              setTargetPlayerId(targetPlayer.id);
-              setTargetUsername(targetPlayer.username);
-            }
+          // IMPORTANT: Always use the targetId from database (assigned by host at game start)
+          if (!players.targetId) {
+            console.error('ERROR: Player has no assigned target! Game may not have started properly.');
+            console.error('Debug info:', { playerId: players.id, targetId: players.targetId, allPlayers: allPlayers.length });
+            setTargetUsername('ERROR: No target assigned. Restart game.');
+            return;
           }
 
-          // If no valid target found, pick a random other player
+          // Find the target player from the list
+          const targetPlayer = allPlayers.find(p => p.id === players.targetId);
+          
           if (!targetPlayer) {
-            console.log(`[Target Assignment] Current player ID: ${players.id}`);
-            console.log(`[Target Assignment] All players: ${JSON.stringify(allPlayers.map(p => ({ id: p.id, username: p.username })))}`);
-
-            const otherPlayers = allPlayers.filter(p => p.id !== players.id);
-            console.log(`[Target Assignment] Other players after filter: ${otherPlayers.length}`);
-
-            if (otherPlayers.length === 0) {
-              console.error('No other players to target');
-              console.error(`[Debug] Total players in lobby: ${allPlayers.length}, Current player ID: ${players.id}`);
-              setTargetUsername('You are alone!');
-              return;
-            }
-
-            targetPlayer = otherPlayers[Math.floor(Math.random() * otherPlayers.length)];
-            console.log(`✓ Self-assigned random target: ${targetPlayer.username} (ID: ${targetPlayer.id})`);
-
-            setTargetPlayerId(targetPlayer.id);
-            setTargetUsername(targetPlayer.username);
-
-            // Update database with the assigned target
-            try {
-              await supabase
-                .from('player')
-                .update({ targetId: targetPlayer.id })
-                .eq('id', players.id);
-              console.log(`✓ Updated database with target assignment`);
-            } catch (error) {
-              console.warn('Could not update database with target, but continuing...', error);
-            }
+            console.error('ERROR: Target player not found in lobby!');
+            console.error('Debug info:', { targetId: players.targetId, availablePlayers: allPlayers.map(p => p.id) });
+            setTargetUsername('ERROR: Target player not found.');
+            return;
           }
+
+          // Check if target is still alive
+          if (targetPlayer.status === 'eliminated') {
+            console.error('ERROR: Your target has been eliminated.');
+            setTargetUsername('Target eliminated - game may be ending.');
+            return;
+          }
+
+          console.log(`✓ Loaded assigned target: ${targetPlayer.username} (ID: ${targetPlayer.id})`);
+          setTargetPlayerId(targetPlayer.id);
+          setTargetUsername(targetPlayer.username);
 
           // Initialize health from database (default to MAX_HEALTH if not set, 0, or suspiciously low)
           // Treat values less than 1000ms as invalid and use MAX_HEALTH instead
@@ -438,6 +427,64 @@ export default function BLEScanning() {
       initializeGame();
     }
   }, [deviceId]);
+
+  // Countdown effect - starts when both lobbyId and targetPlayerId are set
+  useEffect(() => {
+    // Only start countdown if game has loaded and player has a target
+    if (!lobbyId || !targetPlayerId) return;
+
+    // Set a small delay to let UI settle, then show countdown
+    const countdownStartTimer = setTimeout(() => {
+      console.log('🎮 Starting game countdown...');
+      setShowCountdown(true);
+      setCountdownValue(3);
+
+      // Animate the first number
+      animateCountdownNumber();
+    }, 500);
+
+    return () => clearTimeout(countdownStartTimer);
+  }, [lobbyId, targetPlayerId]);
+
+  // Countdown animation and tick logic
+  const animateCountdownNumber = () => {
+    let current = 3;
+
+    const countdownTick = setInterval(() => {
+      current--;
+
+      if (current < 0) {
+        // Countdown finished, hide it and start gameplay
+        clearInterval(countdownTick);
+        
+        Animated.timing(countdownOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start(() => {
+          setShowCountdown(false);
+          console.log('✅ Countdown finished - Game begins!');
+        });
+      } else {
+        // Update the countdown value
+        setCountdownValue(current);
+        
+        // Animate the number: scale in and fade
+        countdownScale.setValue(0);
+        countdownOpacity.setValue(1);
+        
+        Animated.sequence([
+          Animated.spring(countdownScale, {
+            toValue: 1,
+            tension: 50,
+            friction: 7,
+            useNativeDriver: true,
+          }),
+          Animated.delay(current === 0 ? 300 : 700),
+        ]).start();
+      }
+    }, 1000);
+  }
 
   // Listen for game end notification from host
   useEffect(() => {
@@ -1028,25 +1075,38 @@ export default function BLEScanning() {
 
   // Attack button handlers - deals damage over time (only works if assassinate was held first)
   function onKillAttemptPressStart() {
+    // Validate all preconditions before allowing attack
+    if (!playerId || !targetPlayerId || !lobbyId) {
+      console.error('Cannot attack: missing game context', { playerId, targetPlayerId, lobbyId });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
     if (!targetInRange && !demoMode) {
+      console.warn('Target out of range');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
 
     if (!assassinateUnlocked) {
+      console.warn('Must mark target first (hold MARK TARGET for 2 seconds)');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
 
-    // Bug fix #3: Prevent attacking if opponent is already dead
+    // Prevent attacking if opponent is already dead
     if (opponentHealth <= 0) {
+      console.warn('Target already eliminated');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
 
+    // All checks passed - allow attack
     setIsPressed(true);
     setAttackStartTime(Date.now());
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+    console.log('⚔️ Attack started');
 
     // Broadcast "attacking" event to target
     if (targetPlayerId && lobbyId && playerId) {
@@ -1054,16 +1114,24 @@ export default function BLEScanning() {
     }
 
     // Animate attack progress - duration based on opponent's REMAINING health
-    // Bug fix #3: Ensure minimum duration of 100ms to prevent animation issues
+    // Duration equals opponent's current health in milliseconds (min 500ms)
+    const animationDuration = Math.max(500, opponentHealth);
+    console.log(`Attack animation duration: ${animationDuration}ms for remaining health: ${opponentHealth}ms`);
+    
     Animated.timing(pressProgress, {
       toValue: 1,
-      duration: Math.max(100, opponentHealth), // Duration equals opponent's current health (min 100ms)
+      duration: animationDuration,
       useNativeDriver: false,
     }).start();
   }
 
   async function onKillAttemptPressEnd() {
-    if (!isPressed || attackStartTime === null || !playerId || !targetPlayerId || !lobbyId) return;
+    // Only process if attack actually started
+    if (!isPressed || attackStartTime === null || !playerId || !targetPlayerId || !lobbyId) {
+      console.log('Attack end: skipping (attack not started properly)');
+      setIsPressed(false);
+      return;
+    }
 
     // Calculate damage dealt (time held in milliseconds)
     const attackEndTime = Date.now();
@@ -1083,77 +1151,83 @@ export default function BLEScanning() {
         // Stop the animation immediately
         pressProgress.stopAnimation();
         pressProgress.setValue(0);
+        
+        // Release the attack button immediately so player sees it unpressed
+        setIsPressed(false);
+        setAttackStartTime(null);
 
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-        // Show victory elimination animation (dagger)
-        setEliminationType('victory');
-        setShowElimination(true);
-        eliminationScale.setValue(0);
-        eliminationOpacity.setValue(1);
+        // Wait a brief moment for UI to update, then show victory elimination animation (dagger)
+        setTimeout(() => {
+          setEliminationType('victory');
+          setShowElimination(true);
+          eliminationScale.setValue(0);
+          eliminationOpacity.setValue(1);
 
-        Animated.sequence([
-          // Burst in
-          Animated.spring(eliminationScale, {
-            toValue: 1,
-            tension: 40,
-            friction: 8,
-            useNativeDriver: true,
-          }),
-          // Hold
-          Animated.delay(1500),
-          // Fade out
-          Animated.timing(eliminationOpacity, {
-            toValue: 0,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-        ]).start(async () => {
-          setShowElimination(false);
+          Animated.sequence([
+            // Burst in
+            Animated.spring(eliminationScale, {
+              toValue: 1,
+              tension: 40,
+              friction: 8,
+              useNativeDriver: true,
+            }),
+            // Hold
+            Animated.delay(1500),
+            // Fade out
+            Animated.timing(eliminationOpacity, {
+              toValue: 0,
+              duration: 500,
+              useNativeDriver: true,
+            }),
+          ]).start(async () => {
+            setShowElimination(false);
 
-          // Update target to the eliminated player's target (from gameService)
-          if (damageResult.eliminationData?.victim.targetId) {
-            setTargetPlayerId(damageResult.eliminationData.victim.targetId);
+            // Update target to the eliminated player's target (from gameService)
+            if (damageResult.eliminationData?.victim.targetId) {
+              setTargetPlayerId(damageResult.eliminationData.victim.targetId);
 
-            // Get new target info
-            const { data: newTarget } = await supabase
-              .from('player')
-              .select('id, username')
-              .eq('id', damageResult.eliminationData.victim.targetId)
-              .single();
+              // Get new target info
+              const { data: newTarget } = await supabase
+                .from('player')
+                .select('id, username')
+                .eq('id', damageResult.eliminationData.victim.targetId)
+                .single();
 
-            if (newTarget) {
-              setTargetUsername(newTarget.username);
+              if (newTarget) {
+                setTargetUsername(newTarget.username);
+              }
             }
-          }
 
-          // Check if game should end
-          const gameStats = await gameService.getLobbyStats(lobbyId);
-          if (gameStats.alivePlayers === 1) {
-            console.log('🎉 Game Over! You are the last player standing!');
-            setGameActive(false);
+            // Check if game should end
+            const gameStats = await gameService.getLobbyStats(lobbyId);
+            if (gameStats.alivePlayers === 1) {
+              console.log('🎉 Game Over! You are the last player standing!');
+              setGameActive(false);
 
-            // Show victory message
-            Alert.alert(
-              '🎉 Victory!',
-              'You are the last player standing!',
-              [
-                {
-                  text: 'OK',
-                  onPress: async () => {
-                    // End the game and clean up data
-                    console.log('🛑 Winner is ending the game...');
-                    await gameService.endLobby(lobbyId);
+              // Show victory message
+              Alert.alert(
+                '🎉 Victory!',
+                'You are the last player standing!',
+                [
+                  {
+                    text: 'OK',
+                    onPress: async () => {
+                      // End the game and clean up data
+                      console.log('🛑 Winner is ending the game...');
+                      await gameService.endLobby(lobbyId);
 
-                    // Navigate home
-                    router.replace('/');
+                      // Navigate home
+                      router.replace('/');
+                    },
                   },
-                },
-              ],
-              { cancelable: false }
-            );
-          }
-        });
+                ],
+                { cancelable: false }
+              );
+            }
+          });
+        }, 100); // Brief 100ms delay before showing animation
       }
     } catch (error) {
       console.error('Error applying damage:', error);
@@ -1184,9 +1258,40 @@ export default function BLEScanning() {
     outputRange: ['0%', '100%'],
   });
 
-  // Calculate health percentages for health bars
-  const playerHealthPercent = (playerHealth / MAX_HEALTH) * 100;
-  const opponentHealthPercent = (opponentHealth / MAX_HEALTH) * 100;
+  // Monitor target health and stop attack if target dies or goes out of range
+  useEffect(() => {
+    if (!isPressed || !targetPlayerId) return;
+
+    const checkTargetAlive = setInterval(() => {
+      // Check if target is still in range
+      const targetBleDeviceId = bleDeviceMapService.getDeviceIdFromPlayer(targetPlayerId);
+      const targetDevice = targetBleDeviceId ? nearbyDevices[targetBleDeviceId] : null;
+      const stillInRange = targetDevice && typeof targetDevice.distance === 'number' 
+        ? targetDevice.distance <= KILL_RADIUS_METERS 
+        : false;
+
+      // If target is out of range or dead, stop the attack
+      if (opponentHealth <= 0) {
+        console.log('🛑 Target is dead - stopping attack');
+        setIsPressed(false);
+        pressProgress.stopAnimation();
+        pressProgress.setValue(0);
+        clearInterval(checkTargetAlive);
+        return;
+      }
+
+      if (!demoMode && !stillInRange) {
+        console.log('🛑 Target out of range - stopping attack');
+        setIsPressed(false);
+        pressProgress.stopAnimation();
+        pressProgress.setValue(0);
+        clearInterval(checkTargetAlive);
+        return;
+      }
+    }, 100); // Check every 100ms for responsive feedback
+
+    return () => clearInterval(checkTargetAlive);
+  }, [isPressed, targetPlayerId, opponentHealth, nearbyDevices, demoMode]);
 
   // Sword animation interpolations
   const swordRotationDegrees = swordRotation.interpolate({
@@ -1504,6 +1609,31 @@ export default function BLEScanning() {
           </Animated.View>
         </View>
       )}
+
+      {/* Countdown Overlay - appears when game starts */}
+      {showCountdown && (
+        <View style={styles.countdownOverlay}>
+          <Animated.View
+            style={[
+              styles.countdownContainer,
+              {
+                transform: [{ scale: countdownScale }],
+                opacity: countdownOpacity,
+              },
+            ]}
+          >
+            {countdownValue >= 0 ? (
+              <>
+                <Text style={styles.countdownNumber}>
+                  {countdownValue === 0 ? 'GO!' : countdownValue}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.countdownBegin}>BEGIN!</Text>
+            )}
+          </Animated.View>
+        </View>
+      )}
     </View>
   );
 }
@@ -1770,5 +1900,40 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 14,
+  },
+  countdownOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    zIndex: 1002,
+  },
+  countdownContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countdownNumber: {
+    fontSize: 220,
+    fontWeight: '900',
+    color: '#FFD700',
+    textShadowColor: 'rgba(255, 165, 0, 0.8)',
+    textShadowOffset: { width: 4, height: 4 },
+    textShadowRadius: 20,
+    textAlign: 'center',
+    marginTop: -40,
+  },
+  countdownBegin: {
+    fontSize: 120,
+    fontWeight: '900',
+    color: '#00FF00',
+    textShadowColor: 'rgba(0, 255, 0, 0.8)',
+    textShadowOffset: { width: 4, height: 4 },
+    textShadowRadius: 20,
+    textAlign: 'center',
+    letterSpacing: 4,
   },
 });

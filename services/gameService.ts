@@ -45,8 +45,8 @@ interface EliminationResult {
 
 class GameService {
   /**
-   * Assign targets to all players in a lobby using circular distribution
-   * Player 1 → Player 2 → Player 3 → ... → Player 1 (never to self)
+   * Assign targets to all players in a lobby using random distribution
+   * Each player gets a random target that is NOT themselves
    */
   async assignTargetsForLobby(lobbyId: number): Promise<void> {
     try {
@@ -66,12 +66,16 @@ class GameService {
         throw new Error(`Need at least 2 players to start game (found ${players?.length || 0})`);
       }
 
-      // Assign targets circularly: Player 1 → Player 2 → Player 3 → ... → Player 1
+      // Assign targets randomly: each player gets a random target (not themselves)
       for (let i = 0; i < players.length; i++) {
-        const targetIndex = (i + 1) % players.length;
-        const targetId = players[targetIndex].id;
+        // Get all other players (everyone except current player)
+        const otherPlayers = players.filter(p => p.id !== players[i].id);
+        
+        // Pick a random target from other players
+        const randomTarget = otherPlayers[Math.floor(Math.random() * otherPlayers.length)];
+        const targetId = randomTarget.id;
 
-        console.log(`[Target Assignment] ${players[i].username} (${players[i].id}) → ${players[targetIndex].username} (${targetId})`);
+        console.log(`[Target Assignment] ${players[i].username} (${players[i].id}) → ${randomTarget.username} (${targetId})`);
 
         const { error: updateError } = await supabase
           .from('player')
@@ -81,7 +85,7 @@ class GameService {
         if (updateError) throw updateError;
       }
 
-      console.log(`✓ Targets assigned for ${players.length} players in lobby ${lobbyId}`);
+      console.log(`✓ Random targets assigned for ${players.length} players in lobby ${lobbyId}`);
     } catch (error) {
       console.error('Error assigning targets:', error);
       throw error;
