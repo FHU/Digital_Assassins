@@ -35,6 +35,7 @@ export default function RootLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
+        gestureEnabled: false,
       }}
     >
       <Stack.Screen name="index" options={{ title: "Digital Assassin" }} />

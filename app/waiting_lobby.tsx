@@ -1,8 +1,9 @@
 import { useThemeColor } from "@/hooks/useThemeColor";
-import supabaseLobbyStore from "@/services/SupabaseLobbyStore";
+import supabaseLobbyStore, { supabase } from "@/services/SupabaseLobbyStore";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -28,10 +29,14 @@ export default function WaitingLobbyScreen() {
   const [lobbyName, setLobbyName] = useState("");
   const [hostName, setHostName] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lobbyId, setLobbyId] = useState<number | null>(null);
+  const [playerId, setPlayerId] = useState<number | null>(null);
+  const gameStartSubscriptionRef = useRef<any>(null);
+  const playerRemovalSubscriptionRef = useRef<any>(null);
 
   // Refresh lobby data from database
   const refreshLobby = useCallback(async () => {
-    if (!code) return;
+    if (!code || !username) return;
 
     try {
       const lobby = await supabaseLobbyStore.getLobbyByCode(code);
@@ -39,23 +44,156 @@ export default function WaitingLobbyScreen() {
         setPlayers(lobby.players);
         setLobbyName(lobby.name);
         setHostName(lobby.hostUsername);
+        setLobbyId(lobby.id);
+
+        // Get current player's ID
+        const { data: currentPlayer } = await supabaseLobbyStore.supabase
+          .from('player')
+          .select('id')
+          .eq('lobbyId', lobby.id)
+          .eq('username', username)
+          .single();
+
+        if (currentPlayer) {
+          setPlayerId(currentPlayer.id);
+
+          // Check if game has started AND player still exists
+          if (lobby.id) {
+            const { data: lobbyData } = await supabaseLobbyStore.supabase
+              .from('lobby')
+              .select('status')
+              .eq('id', lobby.id)
+              .single();
+
+            if (lobbyData?.status === 'started') {
+              // Navigate to game page
+              console.log('✓ Game started! Navigating to game...');
+              router.push('/ble-scanning');
+            }
+          }
+        } else {
+          // Player was removed from lobby!
+          console.log('⚠️ You were removed from the lobby');
+          // This will be handled by the removal subscription, but ensure cleanup here
+        }
       }
     } catch (error) {
       console.error('Error refreshing lobby:', error);
     }
-  }, [code]);
+  }, [code, username, router]);
 
-  // Set up polling when screen is focused
+  // Set up real-time subscription for game start
+  const subscribeToGameStart = useCallback(() => {
+    if (!lobbyId) return;
+
+    try {
+      console.log('📡 Subscribing to game start notifications...');
+
+      gameStartSubscriptionRef.current = supabase
+        .channel(`lobby-start-${lobbyId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'lobby',
+            filter: `id=eq.${lobbyId}`,
+          },
+          (payload: any) => {
+            console.log('[Lobby Update]', payload);
+
+            // Check if game has started
+            if (payload.new.status === 'started') {
+              console.log('🎮 Game started!');
+              router.push('/ble-scanning');
+            }
+          }
+        )
+        .subscribe();
+    } catch (error) {
+      console.error('Error subscribing to game start:', error);
+    }
+  }, [lobbyId, router]);
+
+  // Set up polling + real-time subscription when screen is focused
   useFocusEffect(
     useCallback(() => {
       refreshLobby();
 
-      // Poll for updates every 1 second
-      const interval = setInterval(refreshLobby, 1000);
+      // Also poll every 5 seconds as fallback
+      const interval = setInterval(refreshLobby, 5000);
 
       return () => clearInterval(interval);
     }, [refreshLobby])
   );
+
+  // Subscribe to player removal
+  const subscribeToPlayerRemoval = useCallback(() => {
+    if (!lobbyId || !playerId) return;
+
+    try {
+      console.log('📡 Subscribing to player removal notifications...');
+
+      playerRemovalSubscriptionRef.current = supabase
+        .channel(`player-removal-${playerId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'player',
+            filter: `id=eq.${playerId}`,
+          },
+          () => {
+            console.log('⚠️ You were removed from the lobby!');
+            onPlayerRemoved();
+          }
+        )
+        .subscribe();
+    } catch (error) {
+      console.error('Error subscribing to player removal:', error);
+    }
+  }, [lobbyId, playerId]);
+
+  const onPlayerRemoved = () => {
+    Alert.alert(
+      'Removed from Lobby',
+      'The host removed you from the game.',
+      [
+        {
+          text: 'OK',
+          onPress: () => {
+            router.push('/');
+          },
+        },
+      ],
+      { cancelable: false }
+    );
+  };
+
+  // Subscribe to game start when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      subscribeToGameStart();
+
+      return () => {
+        if (gameStartSubscriptionRef.current) {
+          gameStartSubscriptionRef.current.unsubscribe();
+        }
+      };
+    }, [subscribeToGameStart])
+  );
+
+  // Subscribe to player removal whenever playerId changes
+  useEffect(() => {
+    subscribeToPlayerRemoval();
+
+    return () => {
+      if (playerRemovalSubscriptionRef.current) {
+        playerRemovalSubscriptionRef.current.unsubscribe();
+      }
+    };
+  }, [subscribeToPlayerRemoval]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
