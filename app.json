@@ -28,6 +28,9 @@
       },
       "bundleIdentifier": "com.NIMZ.Digital-Assassins"
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -48,10 +51,13 @@
         "android.permission.BLUETOOTH_CONNECT",
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "package": "com.anonymous.DigitalAssassins"
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
         "android.permission.BLUETOOTH",
@@ -61,6 +67,9 @@
       ],
       "package": "com.NIMZ.DigitalAssassins"
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
