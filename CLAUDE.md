@@ -461,3 +461,4 @@ The app uses **expo-router** for file-based routing (file system → routes):
 =======
 - Check console logs: `console.log()` appears in dev server terminal and device logs
 >>>>>>> Stashed changes
+- Check console logs: `console.log()` appears in dev server terminal and device logs
