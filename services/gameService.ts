@@ -46,7 +46,7 @@ interface EliminationResult {
 class GameService {
   /**
    * Assign targets to all players in a lobby using circular distribution
-   * Player 1 → Player 2 → Player 3 → ... → Player 1
+   * Player 1 → Player 2 → Player 3 → ... → Player 1 (never to self)
    */
   async assignTargetsForLobby(lobbyId: number): Promise<void> {
     try {
@@ -59,14 +59,19 @@ class GameService {
         .order('id', { ascending: true });
 
       if (playersError) throw playersError;
+
+      console.log(`[Target Assignment] Found ${players?.length || 0} players in lobby ${lobbyId}`);
+
       if (!players || players.length < 2) {
-        throw new Error('Need at least 2 players to start game');
+        throw new Error(`Need at least 2 players to start game (found ${players?.length || 0})`);
       }
 
-      // Assign targets circularly
+      // Assign targets circularly: Player 1 → Player 2 → Player 3 → ... → Player 1
       for (let i = 0; i < players.length; i++) {
         const targetIndex = (i + 1) % players.length;
         const targetId = players[targetIndex].id;
+
+        console.log(`[Target Assignment] ${players[i].username} (${players[i].id}) → ${players[targetIndex].username} (${targetId})`);
 
         const { error: updateError } = await supabase
           .from('player')
@@ -464,23 +469,63 @@ class GameService {
   }
 
   /**
-   * End a lobby (mark as ended)
+   * End a lobby and delete all game data
+   * Deletes: lobby, players, game states
+   * Keeps: devices (for reuse in future games)
+   *
+   * First marks lobby as 'ended' to notify all players via real-time subscription,
+   * then deletes data after a short delay to allow notifications to propagate
    */
   async endLobby(lobbyId: number) {
     try {
-      const { data, error } = await supabase
+      // STEP 1: Mark lobby as ended (triggers real-time notifications)
+      const { error: updateError } = await supabase
         .from('lobby')
         .update({
           status: 'ended',
-          endedAt: new Date().toISOString(),
+          endedAt: new Date().toISOString()
         })
-        .eq('id', lobbyId)
-        .select()
-        .single();
+        .eq('id', lobbyId);
 
-      if (error) throw error;
-      console.log(`✓ Lobby ${lobbyId} ended`);
-      return data;
+      if (updateError) {
+        console.error('Error updating lobby status:', updateError);
+      }
+
+      console.log(`✓ Lobby ${lobbyId} marked as ended, notifying players...`);
+
+      // STEP 2: Wait 2 seconds for notifications to propagate
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // STEP 3: Delete game states for this lobby
+      const { error: gameStateError } = await supabase
+        .from('gamestate')
+        .delete()
+        .eq('lobbyId', lobbyId);
+
+      if (gameStateError) {
+        console.error('Error deleting game states:', gameStateError);
+      }
+
+      // STEP 4: Delete players in this lobby
+      const { error: playerError } = await supabase
+        .from('player')
+        .delete()
+        .eq('lobbyId', lobbyId);
+
+      if (playerError) {
+        console.error('Error deleting players:', playerError);
+      }
+
+      // STEP 5: Delete the lobby itself
+      const { error: lobbyError } = await supabase
+        .from('lobby')
+        .delete()
+        .eq('id', lobbyId);
+
+      if (lobbyError) throw lobbyError;
+
+      console.log(`✓ Lobby ${lobbyId} and all associated data deleted`);
+      return { id: lobbyId, deleted: true };
     } catch (error) {
       console.error('Error ending lobby:', error);
       throw error;

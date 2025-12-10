@@ -137,24 +137,15 @@ export async function createLobby(hostDeviceId: string, hostUsername: string, lo
 
     if (lobbyError) throw lobbyError;
 
-    // Create host as a player
-    const { error: playerError } = await supabase.from('player').insert([
-      {
-        userId: hostDeviceId,
-        username: hostUsername,
-        lobbyId: lobby.id,
-        deviceId: hostDevice.id,
-      },
-    ]);
-
-    if (playerError) throw playerError;
+    // NOTE: Host is NOT added as a player - they only manage the game
+    // Players join separately via addParticipantToLobby
 
     return {
       id: lobby.id,
       code: lobby.lobbyCode,
       name: lobby.lobbyName,
       hostUsername,
-      players: [hostUsername],
+      players: [], // No players yet - they will join
       createdAt: lobby.createdAt,
     };
   } catch (error) {
@@ -235,6 +226,9 @@ export async function addParticipantToLobby(code: string, deviceId: string, user
           username,
           lobbyId: lobby.id,
           deviceId: device.id,
+          bledeviceid: deviceId, // Store the BLE device ID for distance-based targeting
+          healthRemaining: 10000, // 10 seconds of health in milliseconds
+          status: 'alive',
         },
       ]);
 
@@ -251,18 +245,67 @@ export async function addParticipantToLobby(code: string, deviceId: string, user
 
 /**
  * Remove a participant from a lobby
+ * When a player leaves:
+ * 1. Find who they were targeting
+ * 2. Find who was targeting them
+ * 3. Reassign: whoever targeted them now targets their target
+ * 4. Delete the player
  */
 export async function removeParticipantFromLobby(code: string, username: string) {
   try {
     const { data: lobby } = await supabase
       .from('lobby')
-      .select('id')
+      .select('id, status')
       .eq('lobbyCode', code.toUpperCase())
       .single();
 
     if (!lobby) return null;
 
-    await supabase.from('player').delete().eq('lobbyId', lobby.id).eq('username', username);
+    // Get the leaving player's data
+    const { data: leavingPlayer, error: playerError } = await supabase
+      .from('player')
+      .select('id, targetId')
+      .eq('lobbyId', lobby.id)
+      .eq('username', username)
+      .single();
+
+    if (playerError || !leavingPlayer) {
+      console.error('Player not found:', username);
+      return getLobbyByCode(code);
+    }
+
+    // Only reassign targets if game has started
+    if (lobby.status === 'started' && leavingPlayer.targetId) {
+      // Find all players targeting the leaving player
+      const { data: playersTargetingLeaver } = await supabase
+        .from('player')
+        .select('id')
+        .eq('lobbyId', lobby.id)
+        .eq('targetId', leavingPlayer.id)
+        .eq('status', 'alive');
+
+      // Reassign their targets to the leaving player's target
+      if (playersTargetingLeaver && playersTargetingLeaver.length > 0) {
+        for (const player of playersTargetingLeaver) {
+          await supabase
+            .from('player')
+            .update({ targetId: leavingPlayer.targetId })
+            .eq('id', player.id);
+        }
+        console.log(`✓ Reassigned targets for ${playersTargetingLeaver.length} players`);
+      }
+    }
+
+    // Delete the player from the database
+    const { error: deleteError } = await supabase
+      .from('player')
+      .delete()
+      .eq('lobbyId', lobby.id)
+      .eq('username', username);
+
+    if (deleteError) throw deleteError;
+
+    console.log(`✓ Removed player ${username} from lobby`);
 
     return getLobbyByCode(code);
   } catch (error) {
@@ -351,19 +394,58 @@ export async function startLobby(code: string) {
 }
 
 /**
- * Close/end a lobby
+ * Close/end a lobby and delete all game data
+ * Deletes: lobby, players, game states
+ * Keeps: devices (for reuse in future games)
  */
 export async function closeLobby(code: string): Promise<boolean> {
   try {
-    const { error } = await supabase
+    // Find the lobby first
+    const { data: lobby, error: findError } = await supabase
       .from('lobby')
-      .update({
-        status: 'ended',
-        endedAt: new Date().toISOString(),
-      })
-      .eq('lobbyCode', code.toUpperCase());
+      .select('id')
+      .eq('lobbyCode', code.toUpperCase())
+      .single();
 
-    if (error) throw error;
+    if (findError || !lobby) {
+      console.error('Lobby not found:', code);
+      return false;
+    }
+
+    const lobbyId = lobby.id;
+
+    // Delete game states for this lobby
+    const { error: gameStateError } = await supabase
+      .from('gamestate')
+      .delete()
+      .eq('lobbyId', lobbyId);
+
+    if (gameStateError) {
+      console.error('Error deleting game states:', gameStateError);
+    }
+
+    // Delete players in this lobby
+    const { error: playerError } = await supabase
+      .from('player')
+      .delete()
+      .eq('lobbyId', lobbyId);
+
+    if (playerError) {
+      console.error('Error deleting players:', playerError);
+    }
+
+    // Delete the lobby itself
+    const { error: lobbyError } = await supabase
+      .from('lobby')
+      .delete()
+      .eq('id', lobbyId);
+
+    if (lobbyError) {
+      console.error('Error deleting lobby:', lobbyError);
+      return false;
+    }
+
+    console.log(`✓ Lobby ${code} and all associated data deleted`);
     return true;
   } catch (error) {
     console.error('Error closing lobby:', error);
@@ -443,6 +525,9 @@ export async function getLobbyById(lobbyId: number) {
 }
 
 export default {
+  // Supabase client
+  supabase,
+
   // Lobby operations
   createLobby,
   getLobbyByCode,

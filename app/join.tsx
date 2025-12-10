@@ -1,6 +1,5 @@
 import JoinCodeInput from "@/components/JoinCodeInput";
 import { useThemeColor } from "@/hooks/useThemeColor";
-import { useBluetooth } from "@/hooks/useBluetooth";
 import supabaseLobbyStore from "@/services/SupabaseLobbyStore";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -18,20 +17,10 @@ export default function JoinScreen() {
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
   const tintColor = useThemeColor({}, "tint");
-  const { isBluetoothEnabled, enableBluetooth } = useBluetooth();
 
   const [isLoading, setIsLoading] = useState(false);
-  const [currentCode, setCurrentCode] = useState<string>("");
 
-  const handleBluetoothEnable = async () => {
-    const success = await enableBluetooth();
-    if (success && currentCode) {
-      // Retry the code submission after enabling Bluetooth, bypassing the check
-      await processCodeSubmit(currentCode);
-    }
-  };
-
-  const processCodeSubmit = async (code: string) => {
+  const handleCodeSubmit = async (code: string) => {
     setIsLoading(true);
 
     try {
@@ -54,32 +43,6 @@ export default function JoinScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleCodeSubmit = async (code: string) => {
-    setCurrentCode(code);
-
-    // Check if Bluetooth is enabled first
-    if (!isBluetoothEnabled) {
-      Alert.alert(
-        "Bluetooth Required",
-        "Bluetooth must be enabled to join a match",
-        [
-          {
-            text: "Enable Bluetooth",
-            onPress: handleBluetoothEnable,
-          },
-          {
-            text: "Cancel",
-            onPress: () => setCurrentCode(""),
-          },
-        ]
-      );
-      return;
-    }
-
-    // If Bluetooth is enabled, process the code
-    await processCodeSubmit(code);
   };
 
   const styles = StyleSheet.create({
