@@ -1,26 +1,53 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Linking, PermissionsAndroid, Platform } from "react-native";
-import { BleManager } from "react-native-ble-plx";
+import { BleManager, State } from "react-native-ble-plx";
+
+// Singleton BleManager instance - reused across the app
+let globalBleManager: BleManager | null = null;
+
+/**
+ * Get or create the global BLE manager instance
+ * Ensures only one BleManager is created
+ */
+export function getBleManager(): BleManager {
+  if (!globalBleManager) {
+    globalBleManager = new BleManager();
+  }
+  return globalBleManager;
+}
+
+/**
+ * Destroy the global BLE manager (cleanup)
+ */
+export function destroyBleManager(): void {
+  if (globalBleManager) {
+    globalBleManager.destroy();
+    globalBleManager = null;
+  }
+}
 
 export function useBluetooth() {
-  const bleManagerRef = useRef<BleManager | null>(null);
   const [isBluetoothEnabled, setIsBluetoothEnabled] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
+  const stateSubscriptionRef = useRef<any>(null);
 
   useEffect(() => {
     initBluetooth();
     return () => {
-      if (bleManagerRef.current) {
-        bleManagerRef.current.destroy();
+      if (stateSubscriptionRef.current) {
+        stateSubscriptionRef.current.remove();
       }
     };
   }, []);
 
   const initBluetooth = async () => {
     try {
-      bleManagerRef.current = new BleManager();
-      const state = await bleManagerRef.current.state();
-      setIsBluetoothEnabled(state === "PoweredOn");
+      const manager = getBleManager();
+      // Subscribe to BLE state changes
+      stateSubscriptionRef.current = manager.onStateChange(async (state) => {
+        console.log("BLE State:", state);
+        setIsBluetoothEnabled(state === State.PoweredOn);
+      }, true); // true = emit current value immediately
     } catch (error) {
       console.error("Error initializing Bluetooth:", error);
     } finally {
@@ -33,12 +60,10 @@ export function useBluetooth() {
       if (Platform.OS === "ios") {
         // iOS handles permissions through NSBluetoothPeripheralUsageDescription
         // The permission dialog appears when we first access BLE manager
-        if (!bleManagerRef.current) {
-          bleManagerRef.current = new BleManager();
-        }
+        const manager = getBleManager();
 
         // This will trigger the permission prompt on first access
-        const state = await bleManagerRef.current.state();
+        const state = await manager.state();
         setIsBluetoothEnabled(state === "PoweredOn");
 
         if (state !== "PoweredOn") {
@@ -133,16 +158,15 @@ export function useBluetooth() {
 
       if (Platform.OS === "android") {
         // On Android, we can try to enable Bluetooth programmatically
-        if (bleManagerRef.current) {
-          try {
-            await bleManagerRef.current.enable();
-            setIsBluetoothEnabled(true);
-            return true;
-          } catch {
-            // If enable fails, show user settings
-            showBluetoothSettings();
-            return false;
-          }
+        const manager = getBleManager();
+        try {
+          await manager.enable();
+          setIsBluetoothEnabled(true);
+          return true;
+        } catch {
+          // If enable fails, show user settings
+          showBluetoothSettings();
+          return false;
         }
       }
 
@@ -171,5 +195,7 @@ export function useBluetooth() {
     isChecking,
     enableBluetooth,
     showBluetoothSettings,
+    requestBluetoothPermissions,
+    getBleManager,
   };
 }

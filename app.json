@@ -14,6 +14,7 @@
         "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to find and connect with nearby players in the game",
         "NSBluetoothAlwaysAndWhenInUseUsageDescription": "We need Bluetooth to find and connect with nearby players in the game",
         "NSBluetoothPeripheralUsageDescription": "We need Bluetooth to connect with other players in the game",
+<<<<<<< Updated upstream
         "NSBluetoothCentralUsageDescription": "We need Bluetooth to connect with other players in the game",
         "NSLocalNetworkUsageDescription": "This app uses local network to discover nearby players",
         "UIBackgroundModes": [
@@ -22,6 +23,17 @@
         ]
       },
       "bundleIdentifier": "com.anonymous.Digital-Assassins"
+=======
+        "NSBluetoothCentralUsageDescription": "We need Bluetooth to connect with other players in the game"
+      },
+      "bundleIdentifier": "com.NIMZ.Digital-Assassins"
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
     },
     "android": {
       "adaptiveIcon": {
@@ -37,9 +49,30 @@
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.BLUETOOTH_CONNECT",
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "package": "com.anonymous.DigitalAssassins"
+=======
+=======
+>>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT"
+      ],
+      "package": "com.NIMZ.DigitalAssassins"
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
     },
     "web": {
       "output": "static",

@@ -1,10 +1,19 @@
+import { useDeviceId } from "@/hooks/useDeviceId";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import supabaseLobbyStore, { supabase } from "@/services/SupabaseLobbyStore";
 import gameService from "@/services/gameService";
-import { useDeviceId } from "@/hooks/useDeviceId";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import LobbyCode from "./lobby_code";
 import LobbyName from "./lobby_name";
@@ -28,6 +37,7 @@ export default function HostScreen() {
 
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Initialize lobby on mount
   useFocusEffect(
@@ -40,24 +50,54 @@ export default function HostScreen() {
     try {
       setIsLoading(true);
 
-      // Check if there's already an active lobby for this device
-      const existingLobby = await supabaseLobbyStore.getCurrentActiveLobby(deviceId);
+      // First, try to get existing active lobby (don't create new one each time!)
+      console.log(
+        `[Host Init] Looking for existing lobby for device: ${deviceId}`
+      );
+      const existingLobby = await supabaseLobbyStore.getCurrentActiveLobby(
+        deviceId
+      );
 
       if (existingLobby) {
         setLobby(existingLobby);
+        console.log(
+          `✓ Reusing existing lobby with code: ${existingLobby.code}`
+        );
       } else {
-        // Create a new lobby
+        console.log(`[Host Init] No existing lobby found, creating new one...`);
+        // Only create new lobby if none exists
         const newLobby = await supabaseLobbyStore.createLobby(
           deviceId,
           "Host",
           "Game Night"
         );
         setLobby(newLobby);
+        console.log(`✓ Created NEW lobby with code: ${newLobby.code}`);
       }
     } catch (error) {
-      console.error('Error initializing lobby:', error);
+      console.error("Error initializing lobby:", error);
+      Alert.alert("Error", "Failed to create lobby. Please try again.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (!lobby) return;
+    setIsRefreshing(true);
+    try {
+      // Refresh lobby data to see updated participants
+      const updatedLobby = await supabaseLobbyStore.getLobbyByCode(lobby.code);
+      if (updatedLobby) {
+        setLobby(updatedLobby);
+        console.log(
+          `✓ Refreshed lobby - ${updatedLobby.players.length} participants`
+        );
+      }
+    } catch (error) {
+      console.error("Error refreshing lobby:", error);
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -65,7 +105,7 @@ export default function HostScreen() {
 
   const handleStartGame = async () => {
     if (!lobby || !lobby.id) {
-      Alert.alert('Error', 'Lobby not found');
+      Alert.alert("Error", "Lobby not found");
       return;
     }
 
@@ -77,19 +117,20 @@ export default function HostScreen() {
 
       // Update lobby status to "started"
       const { error } = await supabase
-        .from('Lobby')
-        .update({ status: 'started', startedAt: new Date().toISOString() })
-        .eq('id', lobby.id);
+        .from("lobby")
+        .update({ status: "started", startedAt: new Date().toISOString() })
+        .eq("id", lobby.id);
 
       if (error) throw error;
 
-      console.log('✓ Game started! Targets assigned.');
+      console.log("✓ Game started! Targets assigned.");
 
-      // Navigate to BLE scanning screen
-      router.push('/ble-scanning');
+      // Navigate to host game management screen
+      // The host will manage the game from there, not play as a player
+      router.push("/host_page/host-game");
     } catch (error) {
-      console.error('Error starting game:', error);
-      Alert.alert('Error', 'Failed to start game. Please try again.');
+      console.error("Error starting game:", error);
+      Alert.alert("Error", "Failed to start game. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -160,16 +201,32 @@ export default function HostScreen() {
   // Don't render until lobby is loaded
   if (isLoading || !lobby) {
     return (
-      <SafeAreaView style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+      <SafeAreaView
+        style={[
+          styles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
         <ActivityIndicator size="large" color={tintColor} />
-        <Text style={{ color: textColor, marginTop: 16 }}>Initializing lobby...</Text>
+        <Text style={{ color: textColor, marginTop: 16 }}>
+          Initializing lobby...
+        </Text>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={tintColor}
+          />
+        }
+      >
         <Text style={styles.title}>Host Match</Text>
 
         <View style={styles.lobbyInfoContainer}>
@@ -178,7 +235,10 @@ export default function HostScreen() {
         </View>
 
         <View style={styles.participantListWrapper}>
-          <ParticipantList initialParticipants={hostParticipants} />
+          <ParticipantList
+            initialParticipants={hostParticipants}
+            lobbyCode={lobby.code}
+          />
         </View>
       </ScrollView>
 
@@ -189,7 +249,7 @@ export default function HostScreen() {
           disabled={isLoading}
         >
           <Text style={styles.buttonText}>
-            {isLoading ? 'Starting...' : 'Start Game'}
+            {isLoading ? "Starting..." : "Start Game"}
           </Text>
         </TouchableOpacity>
 

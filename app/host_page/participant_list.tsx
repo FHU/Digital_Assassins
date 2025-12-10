@@ -1,14 +1,17 @@
-import { View, StyleSheet, ScrollView, TouchableOpacity, Text } from "react-native";
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Alert } from "react-native";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { useState } from "react";
 import Participant from "./participant";
+import supabaseLobbyStore from "@/services/SupabaseLobbyStore";
 
 interface Props {
   initialParticipants?: string[];
+  lobbyCode?: string;
 }
 
 export default function ParticipantList({
   initialParticipants = [],
+  lobbyCode = "",
 }: Props) {
   const [participants, setParticipants] = useState<string[]>(
     initialParticipants
@@ -23,8 +26,21 @@ export default function ParticipantList({
     }
   };
 
-  const removeParticipant = (index: number) => {
-    setParticipants(participants.filter((_, i) => i !== index));
+  const removeParticipant = async (index: number) => {
+    const usernameToRemove = participants[index];
+
+    try {
+      // Remove from database if lobby code is available
+      if (lobbyCode) {
+        await supabaseLobbyStore.removeParticipantFromLobby(lobbyCode, usernameToRemove);
+      }
+
+      // Remove from UI
+      setParticipants(participants.filter((_, i) => i !== index));
+    } catch (error) {
+      console.error('Error removing participant:', error);
+      Alert.alert('Error', 'Failed to remove participant');
+    }
   };
 
   const styles = StyleSheet.create({
