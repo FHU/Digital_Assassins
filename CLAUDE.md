@@ -48,15 +48,30 @@ eas build --platform android  # Build for Android (requires EAS account)
 app/                    # Active development (file-based routing)
 ├── _layout.tsx        # Root layout wrapper (Stack navigation)
 ├── index.tsx          # Home screen / root route
-├── host.tsx           # Host match screen
-└── join.tsx           # Join match screen
+├── join.tsx           # Join match screen (enter code)
+├── join_lobby.tsx     # Join lobby screen (lobby details after code verified)
+└── host_page/         # Host match management
+    ├── host.tsx       # Host match setup (main screen)
+    ├── lobby_code.tsx # Display generated lobby code
+    ├── lobby_name.tsx # Set lobby/game name
+    ├── participant_list.tsx # List all joined participants
+    └── participant.tsx # Individual participant component
 
-constants/             # Shared constants (theme colors, etc.)
-hooks/                 # Custom React hooks (useColorScheme, useThemeColor)
-assets/                # Static images and fonts
+components/            # Reusable UI components
+├── index.ts          # Barrel export
+└── JoinCodeInput.tsx # Code input component (6-digit)
+
+constants/            # Shared constants (theme colors, etc.)
+hooks/                # Custom React hooks
+├── useColorScheme.ts
+├── useThemeColor.ts
+├── useBluetooth.ts   # Bluetooth connectivity management
+services/             # Business logic and data management
+├── LobbyStore.ts     # MVP in-memory lobby storage (code generation, participant management)
+assets/               # Static images and fonts
 ```
 
-**Note**: The `app-example/` directory only exists after running `npm run reset-project`. The `components/` directory should be created as reusable UI components are extracted.
+**Note**: The `app-example/` directory contains the Expo starter template and is preserved for reference.
 
 ### File-Based Routing (Expo Router)
 - Files in `/app` automatically become routes based on filename
@@ -65,9 +80,13 @@ assets/                # Static images and fonts
 - Use `.ios.tsx`, `.android.tsx`, `.web.tsx` suffixes for platform-specific code
 
 Current routes:
-- `index.tsx` → "/" (Home screen)
-- `host.tsx` → "/host" (Host match setup)
-- `join.tsx` → "/join" (Join match screen)
+- `index.tsx` → "/" (Home screen with Host/Join buttons)
+- `/host_page/host.tsx` → "/host_page/host" (Host match setup and participant management)
+- `join.tsx` → "/join" (Join screen - enter 6-digit code)
+- `join_lobby.tsx` → "/join_lobby?code=XXXXXX" (Lobby details after code verification)
+- `/host_page/lobby_code.tsx` → "/host_page/lobby_code" (Display generated code)
+- `/host_page/lobby_name.tsx` → "/host_page/lobby_name" (Set lobby name)
+- `/host_page/participant_list.tsx` → "/host_page/participant_list" (View participants)
 
 The root `_layout.tsx` uses `Stack` navigation to manage screen transitions.
 
@@ -89,12 +108,19 @@ The root `_layout.tsx` uses `Stack` navigation to manage screen transitions.
 ### Navigation
 - **Expo Router** (v6.0.11) - File-based routing
 - **React Navigation** (v7.1.8) - Native navigation library
-  - `@react-navigation/bottom-tabs` - Tab-based navigation
+  - `@react-navigation/bottom-tabs` (v7.4.0) - Tab-based navigation
   - `@react-navigation/native` - Core navigation primitives
+  - `@react-navigation/elements` (v2.6.3) - Navigation utilities
+
+### Connectivity & Bluetooth
+- **react-native-ble-plx** (v3.5.0) - Bluetooth Low Energy for device-to-device communication
+- **expo-permissions** (v14.4.0) - Permission management (Bluetooth permissions on Android)
+- **expo-linking** - Deep linking and settings integration
 
 ### UI & Animation
 - **React Native Reanimated** (v4.1.1) - Complex animations
 - **React Native Gesture Handler** (v2.28.0) - Touch gestures
+- **React Native Worklets** (v0.5.1) - Worklet support for animations
 - **Expo Vector Icons** (v15.0.2) - Icon library
 
 ### Platform Features
@@ -102,7 +128,14 @@ The root `_layout.tsx` uses `Stack` navigation to manage screen transitions.
 - **expo-splash-screen** - Custom splash screen
 - **expo-image** - Optimized image component
 - **expo-font** - Custom font loading
+- **expo-constants** - App constants and environment
+- **expo-system-ui** - System UI customization
+- **expo-symbols** (v1.0.7) - Native symbol support
+- **expo-status-bar** - Status bar customization
+- **expo-web-browser** - Web browser integration
 - **React Native Web** (v0.21.0) - Web platform support
+- **react-native-safe-area-context** (v5.6.0) - Safe area handling
+- **react-native-screens** (v4.16.0) - Native screen components
 
 ## Development Guidelines
 
@@ -118,22 +151,41 @@ The root `_layout.tsx` uses `Stack` navigation to manage screen transitions.
 - No tests are configured; focus on code review and manual testing
 
 ### Component Development
-- As components become reusable across screens, extract them to `/components` directory
-- Create a `components/index.ts` barrel export for clean imports: `export { Button } from './Button'`
+- Reusable components are extracted to `/components` directory
+- Use barrel exports (`components/index.ts`) for clean imports
 - Use `useThemeColor` hook for theme-aware styling in all components
 - Use composition over inheritance for complex UIs
 - Each screen currently uses inline `StyleSheet.create()` - consider extracting styles as component library grows
+- Examples: `JoinCodeInput` component for 6-digit code input
+
+### Business Logic & Services
+- MVP lobby management is in `/services/LobbyStore.ts` - in-memory storage for lobbies, participants, and code generation
+- **Future**: Replace LobbyStore with backend (Firestore, Supabase, or custom API)
+- Lobby structure: `code` (6-char), `hostName`, `name`, `participants[]`, `createdAt`
+- Code generation: 6-character alphanumeric (A-Z, 0-9), auto-collision prevention
+
+### Bluetooth Integration
+- `useBluetooth()` hook (in `/hooks/useBluetooth.ts`) manages Bluetooth state and permissions
+- Uses `react-native-ble-plx` for BLE device communication
+- Platform-specific implementations:
+  - **iOS**: Cannot programmatically enable Bluetooth; directs users to Settings app
+  - **Android**: Can request enable via `BleManager.enable()`
+  - **Web**: No Bluetooth support
+- Permissions are checked before allowing match join/host
+- Future: Replace with p2p communication layer (WebSocket, Firebase Realtime DB, or custom server)
 
 ### Cross-Platform Development
 - Write platform-agnostic code by default
 - Use platform-specific files only when necessary (`.ios.tsx`, `.android.tsx`, `.web.tsx`)
 - Test on all three platforms (iOS simulator, Android emulator, web) before committing
 - Use `Platform` from `react-native` for runtime platform detection if needed
+- Bluetooth features gracefully degrade on web (no native BLE)
 
 ### State Management
 - Currently no state management library is configured
-- Use React Context API for global state (reference: `app-example` for patterns)
-- Consider Redux, Zustand, or MobX if complex state is needed
+- Lobby/participant state managed through `LobbyStore` module (will evolve into Redux/Zustand when backend is added)
+- Screen-level state: Use `useState` for local state
+- Global state: Consider React Context API for shared state (theme, user info) or Zustand/Redux for game state
 
 ## Configuration Files
 
@@ -142,6 +194,8 @@ The root `_layout.tsx` uses `Stack` navigation to manage screen transitions.
 - `experiments.reactCompiler` is enabled for automatic optimization
 - `experiments.typedRoutes` is enabled for type-safe route navigation
 - `scheme: "digitalassassins"` for deep linking
+- Bluetooth permissions configured in `ios.infoPlist` and `android.permissions`
+- New Architecture enabled (`newArchEnabled: true`)
 
 ### tsconfig.json
 - Extends Expo's base config with strict TypeScript settings
@@ -174,17 +228,64 @@ The root `_layout.tsx` uses `Stack` navigation to manage screen transitions.
 
 ## Current Application Structure
 
-**Digital Assassins** is a multiplayer game application in early development. The current routing structure:
-- `/` - Home screen with Host/Join buttons
-- `/host` - Host match setup screen (placeholder)
-- `/join` - Join match screen (placeholder)
+**Digital Assassins** is a multiplayer game application in MVP phase. The game allows users to:
+1. **Host a match**: Generate a 6-digit lobby code, set lobby name, wait for participants
+2. **Join a match**: Enter a 6-digit code, see participants in the lobby
+
+### User Flows
+
+**Host Flow:**
+1. Home screen → "Host" button
+2. Set lobby name (lobby_name.tsx)
+3. View generated 6-digit code (lobby_code.tsx)
+4. See participants join in real-time (participant_list.tsx, host.tsx)
+5. Start game (future feature)
+
+**Join Flow:**
+1. Home screen → "Join" button
+2. Enter 6-digit code (join.tsx with JoinCodeInput)
+3. View lobby details with participants (join_lobby.tsx)
+4. Wait for host to start game (future feature)
 
 ### Theme & Styling
-- Colors are defined in `constants/theme.ts`
-- Custom hooks provide theme colors: `useColorScheme()`, `useThemeColor()`
-- The app uses inline `StyleSheet.create()` for component styling (not extracted to separate files yet)
-- Theme colors include: `primary`, `danger`, `text`, `tint`, `background`
+- Colors defined in `constants/theme.ts` with light/dark mode support
+- Color palette:
+  - **Light mode**: Light gray background (#F2F4F6), dark text (#11181C)
+  - **Dark mode**: Dark navy background (#0C1116), light text (#ECEDEE)
+  - **Accent colors**: primary (#00BFA6 - teal), danger (#FF3366 - red)
+- Custom hooks: `useColorScheme()` detects system preference, `useThemeColor()` returns theme-aware colors
+- The app uses inline `StyleSheet.create()` for component styling
 - System automatically switches between light/dark mode based on device preference
+
+## Critical Architecture Patterns
+
+### Lobby Code & Participant Management
+The `LobbyStore` (services/LobbyStore.ts) is the MVP backend replacement. Understand these key concepts:
+- **Code generation**: 6-character alphanumeric with collision detection (see `generateUniqueCode()`)
+- **In-memory storage**: Lobbies stored in `Map<code, Lobby>` - persists during app session, lost on app restart
+- **Participant structure**: `{id, username, joinedAt}` - ID is auto-generated using `username-timestamp` pattern
+- **Key functions**:
+  - `createLobby(hostName, lobbyName)` - Called by host; generates code and creates lobby
+  - `getLobbyByCode(code)` - Called by join flow to verify code exists
+  - `addParticipantToLobby(code, username)` - Called when player joins
+  - `getCurrentActiveLobby()` - MVP-only; returns first active lobby
+  - `closeLobby(code)` - Called when host ends game
+
+### Routing & Navigation Deep-Dive
+The app uses Expo Router's file-based routing which creates routes from file names:
+- Nested folders create route hierarchies (e.g., `/host_page/host.tsx` → `/host_page/host`)
+- Root `_layout.tsx` defines the `Stack` navigator and shared wrappers
+- Each route file is a screen component that receives route params via `useRoute()` or `useSearchParams()`
+- The `join_lobby` route receives `code` as a query parameter from the `join` screen
+
+### Bluetooth & Permissions Flow
+When joining/hosting, the app checks Bluetooth state:
+1. `useBluetooth()` hook initializes `BleManager` on app start
+2. On match action (host/join), `enableBluetooth()` is called
+3. If Bluetooth disabled, an alert prompts the user
+4. On Android: Requests Bluetooth permissions + can enable BLE
+5. On iOS: Cannot enable programmatically; redirects to Settings
+6. Future: Replace with actual peer discovery/messaging via BLE (currently just checks state)
 
 ## Git Workflow
 
@@ -229,13 +330,44 @@ The root `_layout.tsx` uses `Stack` navigation to manage screen transitions.
 - No native APIs (no haptics, limited camera/contacts access)
 - Deploy as static site or SPA
 
+## Common Development Patterns & Integration Points
+
+### Adding a New Screen
+1. Create file in `/app` or subdirectory (e.g., `/app/game.tsx`)
+2. Import at top of route file: `useRouter` from `expo-router`
+3. Use `useThemeColor` hook for styling
+4. Add route to root `_layout.tsx` if it's a new main route
+5. Navigate via `router.push("/route-name")` or `router.push({pathname: "/route", params: {}})`
+
+### Working with Lobbies
+1. Host creates lobby: `const lobby = createLobby(hostName, lobbyName)` → Get back `{code, participants}`
+2. Player joins: `const lobby = getLobbyByCode(code)` → Verify code exists, then `addParticipantToLobby(code, username)`
+3. Always normalize codes to uppercase: `getLobbyByCode(code.toUpperCase())`
+4. Participant IDs are unique per session; use them to identify and remove players
+
+### Bluetooth Requires Permissions
+- Always check `isBluetoothEnabled` before attempting to join/host
+- Use `enableBluetooth()` callback to request user permission
+- Web will not have Bluetooth support; gracefully skip Bluetooth checks or hide features
+
+### Route Parameters
+- Query params: `useSearchParams()` from `expo-router` (e.g., `/join_lobby?code=ABCD12`)
+- Nested params: `useLocalSearchParams()` for route groups
+- All params are strings; convert to appropriate types manually
+
+### Theming in Components
+- Always use `useThemeColor({}, "colorName")` instead of hardcoding colors
+- Available colors: `text`, `background`, `tint`, `primary`, `danger`, `icon`
+- Pass empty object `{}` as first param (for future override support)
+
 ## Debugging
 
-- Use Expo Go app for sandbox development (limited native features)
+- Use Expo Go app for sandbox development (limited native features like Bluetooth)
 - Create development build for full native feature access: `eas build --platform [ios|android] --profile preview`
 - Use device/simulator dev menu: Shake device (iOS) or press menu button (Android)
 - VSCode debugging: Install `expo.vscode-expo-tools` extension for enhanced debugging
 - Web debugging: Use browser DevTools (F12)
+<<<<<<< Updated upstream
 =======
 This is a React Native/Expo mobile application called "Digital_Assassins" built with TypeScript. It uses expo-router for file-based routing and supports iOS, Android, and web platforms. The project follows the Expo 54 framework with React 19 and React Native 0.81.
 
@@ -321,4 +453,7 @@ The app uses **expo-router** for file-based routing (file system → routes):
 - Configured via `eslint-config-expo` with flat config format
 - Run `npm run lint` to check code
 - The `dist/` directory is ignored
+>>>>>>> Stashed changes
+=======
+- Check console logs: `console.log()` appears in dev server terminal and device logs
 >>>>>>> Stashed changes
