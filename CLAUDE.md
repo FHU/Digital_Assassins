@@ -368,6 +368,7 @@ When joining/hosting, the app checks Bluetooth state:
 - VSCode debugging: Install `expo.vscode-expo-tools` extension for enhanced debugging
 - Web debugging: Use browser DevTools (F12)
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
 This is a React Native/Expo mobile application called "Digital_Assassins" built with TypeScript. It uses expo-router for file-based routing and supports iOS, Android, and web platforms. The project follows the Expo 54 framework with React 19 and React Native 0.81.
 
@@ -453,6 +454,9 @@ The app uses **expo-router** for file-based routing (file system → routes):
 - Configured via `eslint-config-expo` with flat config format
 - Run `npm run lint` to check code
 - The `dist/` directory is ignored
+>>>>>>> Stashed changes
+=======
+- Check console logs: `console.log()` appears in dev server terminal and device logs
 >>>>>>> Stashed changes
 =======
 - Check console logs: `console.log()` appears in dev server terminal and device logs
