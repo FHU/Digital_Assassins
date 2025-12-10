@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   RefreshControl,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -48,10 +49,10 @@ export default function WaitingLobbyScreen() {
 
         // Get current player's ID
         const { data: currentPlayer } = await supabaseLobbyStore.supabase
-          .from('player')
-          .select('id')
-          .eq('lobbyId', lobby.id)
-          .eq('username', username)
+          .from("player")
+          .select("id")
+          .eq("lobbyId", lobby.id)
+          .eq("username", username)
           .single();
 
         if (currentPlayer) {
@@ -60,25 +61,25 @@ export default function WaitingLobbyScreen() {
           // Check if game has started AND player still exists
           if (lobby.id) {
             const { data: lobbyData } = await supabaseLobbyStore.supabase
-              .from('lobby')
-              .select('status')
-              .eq('id', lobby.id)
+              .from("lobby")
+              .select("status")
+              .eq("id", lobby.id)
               .single();
 
-            if (lobbyData?.status === 'started') {
+            if (lobbyData?.status === "started") {
               // Navigate to game page
-              console.log('✓ Game started! Navigating to game...');
-              router.push('/ble-scanning');
+              console.log("✓ Game started! Navigating to game...");
+              router.push("/ble-scanning");
             }
           }
         } else {
           // Player was removed from lobby!
-          console.log('⚠️ You were removed from the lobby');
+          console.log("⚠️ You were removed from the lobby");
           // This will be handled by the removal subscription, but ensure cleanup here
         }
       }
     } catch (error) {
-      console.error('Error refreshing lobby:', error);
+      console.error("Error refreshing lobby:", error);
     }
   }, [code, username, router]);
 
@@ -87,31 +88,31 @@ export default function WaitingLobbyScreen() {
     if (!lobbyId) return;
 
     try {
-      console.log('📡 Subscribing to game start notifications...');
+      console.log("📡 Subscribing to game start notifications...");
 
       gameStartSubscriptionRef.current = supabase
         .channel(`lobby-start-${lobbyId}`)
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'lobby',
+            event: "UPDATE",
+            schema: "public",
+            table: "lobby",
             filter: `id=eq.${lobbyId}`,
           },
           (payload: any) => {
-            console.log('[Lobby Update]', payload);
+            console.log("[Lobby Update]", payload);
 
             // Check if game has started
-            if (payload.new.status === 'started') {
-              console.log('🎮 Game started!');
-              router.push('/ble-scanning');
+            if (payload.new.status === "started") {
+              console.log("🎮 Game started!");
+              router.push("/ble-scanning");
             }
           }
         )
         .subscribe();
     } catch (error) {
-      console.error('Error subscribing to game start:', error);
+      console.error("Error subscribing to game start:", error);
     }
   }, [lobbyId, router]);
 
@@ -132,38 +133,38 @@ export default function WaitingLobbyScreen() {
     if (!lobbyId || !playerId) return;
 
     try {
-      console.log('📡 Subscribing to player removal notifications...');
+      console.log("📡 Subscribing to player removal notifications...");
 
       playerRemovalSubscriptionRef.current = supabase
         .channel(`player-removal-${playerId}`)
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: 'DELETE',
-            schema: 'public',
-            table: 'player',
+            event: "DELETE",
+            schema: "public",
+            table: "player",
             filter: `id=eq.${playerId}`,
           },
           () => {
-            console.log('⚠️ You were removed from the lobby!');
+            console.log("⚠️ You were removed from the lobby!");
             onPlayerRemoved();
           }
         )
         .subscribe();
     } catch (error) {
-      console.error('Error subscribing to player removal:', error);
+      console.error("Error subscribing to player removal:", error);
     }
   }, [lobbyId, playerId]);
 
   const onPlayerRemoved = () => {
     Alert.alert(
-      'Removed from Lobby',
-      'The host removed you from the game.',
+      "Removed from Lobby",
+      "The host removed you from the game.",
       [
         {
-          text: 'OK',
+          text: "OK",
           onPress: () => {
-            router.push('/');
+            router.push("/");
           },
         },
       ],
@@ -342,24 +343,26 @@ export default function WaitingLobbyScreen() {
 
   if (!code || !username) {
     return (
-      <View style={[styles.container]}>
-        <View style={styles.headerCard}>
-          <Text style={[styles.title, { color: dangerColor }]}>
-            Invalid Access
-          </Text>
-          <Text style={[styles.waitingMessageText]}>
-            Unable to load lobby. Please try again.
-          </Text>
+      <SafeAreaView>
+        <View style={[styles.container]}>
+          <View style={styles.headerCard}>
+            <Text style={[styles.title, { color: dangerColor }]}>
+              Invalid Access
+            </Text>
+            <Text style={[styles.waitingMessageText]}>
+              Unable to load lobby. Please try again.
+            </Text>
+          </View>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: tintColor }]}
+              onPress={() => router.push("/")}
+            >
+              <Text style={styles.buttonText}>Go Home</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: tintColor }]}
-            onPress={() => router.push("/")}
-          >
-            <Text style={styles.buttonText}>Go Home</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -422,9 +425,7 @@ export default function WaitingLobbyScreen() {
             <View style={styles.participantsList}>
               {players.map((playerName) => (
                 <View key={playerName} style={styles.participantCard}>
-                  <Text style={styles.participantUsername}>
-                    {playerName}
-                  </Text>
+                  <Text style={styles.participantUsername}>{playerName}</Text>
                   {playerName === hostName && (
                     <Text style={styles.hostBadge}>👑 Host</Text>
                   )}
