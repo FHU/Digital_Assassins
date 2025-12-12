@@ -62,6 +62,10 @@ export default function BLEScanning() {
   const [playerHealth, setPlayerHealth] = useState(MAX_HEALTH);
   const [opponentHealth, setOpponentHealth] = useState(MAX_HEALTH);
 
+  // Calculate health percentages for progress bars
+  const playerHealthPercent = (playerHealth / MAX_HEALTH) * 100;
+  const opponentHealthPercent = (opponentHealth / MAX_HEALTH) * 100;
+
   // Dodge system
   const [isDodgePressed, setIsDodgePressed] = useState(false);
   const [beingAttacked, setBeingAttacked] = useState(false); // lights up dodge button (warning only)
@@ -93,6 +97,9 @@ export default function BLEScanning() {
   const shieldScale = useRef(new Animated.Value(0)).current;
   const shieldOpacity = useRef(new Animated.Value(0)).current;
   const [showShield, setShowShield] = useState(false);
+
+  // Help modal
+  const [showHelp, setShowHelp] = useState(false);
 
   // Elimination animation
   const eliminationScale = useRef(new Animated.Value(0)).current;
@@ -545,7 +552,7 @@ export default function BLEScanning() {
           text: "OK",
           onPress: () => {
             // Go back to home
-            router.replace("/");
+            router.replace('/');
           },
         },
       ],
@@ -568,7 +575,7 @@ export default function BLEScanning() {
           text: "OK",
           onPress: () => {
             // Go back to home
-            router.replace("/");
+            router.replace('/');
           },
         },
       ],
@@ -644,11 +651,24 @@ export default function BLEScanning() {
                 if (newData.markedAt && !newData.attackStartedAt) {
                   // Just marked, not actively attacking yet
                   setBeingAttacked(true);
+                  // Vibration pattern: double pulse for marking
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setTimeout(() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  }, 100);
                   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                 } else if (newData.attackStartedAt) {
                   // Actively being attacked!
                   setBeingAttacked(true);
                   setTakingDamage(true);
+                  // Strong vibration pattern: triple rapid pulses for active attack
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                  setTimeout(() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                  }, 80);
+                  setTimeout(() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                  }, 160);
                   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                 }
               } else {
@@ -872,6 +892,9 @@ export default function BLEScanning() {
             ]).start(() => {
               setShowElimination(false);
             });
+          } else {
+            // Periodic vibration while taking damage (heartbeat-like pattern)
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
           }
           return newHealth;
         });
@@ -1051,6 +1074,14 @@ export default function BLEScanning() {
     // Start assassinate timer - after 2 seconds, unlock attack button
     assassinateTimer.current = setTimeout(async () => {
       setAssassinateUnlocked(true);
+      // Enhanced vibration on successful mark: ascending pulse pattern
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setTimeout(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }, 100);
+      setTimeout(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }, 200);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       // Broadcast "marked" event to target
@@ -1156,6 +1187,14 @@ export default function BLEScanning() {
         setIsPressed(false);
         setAttackStartTime(null);
 
+        // Victory vibration pattern: celebratory rapid pulses
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        setTimeout(() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        }, 80);
+        setTimeout(() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        }, 160);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
         // Wait a brief moment for UI to update, then show victory elimination animation (dagger)
@@ -1330,6 +1369,15 @@ export default function BLEScanning() {
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
+      {/* Help Button - Top Right Corner */}
+      <TouchableOpacity
+        style={styles.helpButton}
+        onPress={() => setShowHelp(true)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.helpButtonText}>?</Text>
+      </TouchableOpacity>
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -1634,6 +1682,85 @@ export default function BLEScanning() {
           </Animated.View>
         </View>
       )}
+
+      {/* Help Modal */}
+      {showHelp && (
+        <View style={styles.helpModalOverlay}>
+          <View style={styles.helpModalContainer}>
+            <TouchableOpacity
+              style={styles.helpCloseButton}
+              onPress={() => setShowHelp(false)}
+            >
+              <Text style={styles.helpCloseText}>✕</Text>
+            </TouchableOpacity>
+
+            <ScrollView style={styles.helpModalContent} showsVerticalScrollIndicator={true}>
+              <Text style={styles.helpModalTitle}>How to Play</Text>
+
+              <Text style={styles.helpSectionTitle}>🎯 Objective</Text>
+              <Text style={styles.helpText}>
+                Be the last player standing. You have a target to eliminate, and someone is targeting you. Use your Bluetooth abilities to track nearby players!
+              </Text>
+
+              <Text style={styles.helpSectionTitle}>🎮 Controls</Text>
+              
+              <Text style={styles.helpSubtitle}>MARK TARGET (Middle Button)</Text>
+              <Text style={styles.helpText}>
+                Hold the MARK TARGET button for 2 seconds to mark your target. Once marked, the ATTACK button will be unlocked.
+              </Text>
+
+              <Text style={styles.helpSubtitle}>ATTACK (Bottom Button)</Text>
+              <Text style={styles.helpText}>
+                Once your target is marked, hold the ATTACK button to deal damage. The longer you hold, the more damage you deal. You must be within 10 meters of your target to attack (or very close in a confined space).
+              </Text>
+
+              <Text style={styles.helpSubtitle}>BLOCK (Top Button)</Text>
+              <Text style={styles.helpText}>
+                When someone marks or attacks you, the BLOCK button lights up. Tap it quickly to dodge the incoming attack and avoid taking damage.
+              </Text>
+
+              <Text style={styles.helpSectionTitle}>💚 Health System</Text>
+              <Text style={styles.helpText}>
+                Both you and your target have a health bar. As you deal damage, your target&apos;s health decreases. If your health reaches zero, you&apos;re eliminated. If your target&apos;s health reaches zero, they&apos;re eliminated and you inherit their target.
+              </Text>
+
+              <Text style={styles.helpSectionTitle}>📡 Range & Bluetooth</Text>
+              <Text style={styles.helpText}>
+                The app uses Bluetooth signals to detect nearby players and estimate distance. You need to be within 10 meters of your target to attack. The OUT OF RANGE message means your target is too far away.
+              </Text>
+
+              <Text style={styles.helpSectionTitle}>⚡ Vibration Feedback</Text>
+              <Text style={styles.helpText}>
+                • Double pulse: You&apos;ve been marked{'\n'}
+                • Triple rapid pulse: Active attack incoming{'\n'}
+                • Periodic pulses: Taking damage{'\n'}
+                • Celebration pulses: You eliminated a target
+              </Text>
+
+              <Text style={styles.helpSectionTitle}>🏆 Winning</Text>
+              <Text style={styles.helpText}>
+                Continue marking and attacking targets until you&apos;re the last player alive. Then celebrate your victory!
+              </Text>
+
+              <Text style={styles.helpSectionTitle}>💡 Tips</Text>
+              <Text style={styles.helpText}>
+                • Stay mobile to avoid being trapped{'\n'}
+                • Listen for vibrations - they warn you of danger{'\n'}
+                • Move closer to your target if you see OUT OF RANGE{'\n'}
+                • Block as soon as the button lights up to save your health{'\n'}
+                • The longer you hold ATTACK, the faster you win
+              </Text>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.helpCloseConfirm}
+              onPress={() => setShowHelp(false)}
+            >
+              <Text style={styles.helpCloseConfirmText}>Got It!</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -1935,5 +2062,118 @@ const styles = StyleSheet.create({
     textShadowRadius: 20,
     textAlign: 'center',
     letterSpacing: 4,
+  },
+  helpButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FF6B00',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    zIndex: 100,
+  },
+  helpButtonText: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  helpModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2000,
+    padding: 20,
+  },
+  helpModalContainer: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '80%',
+    padding: 20,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+  },
+  helpCloseButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2001,
+  },
+  helpCloseText: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '600',
+  },
+  helpModalContent: {
+    marginTop: 20,
+  },
+  helpModalTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#FF6B00',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  helpSectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFD700',
+    marginTop: 15,
+    marginBottom: 8,
+  },
+  helpSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FF6B00',
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  helpText: {
+    fontSize: 14,
+    color: '#fff',
+    lineHeight: 20,
+    marginBottom: 10,
+  },
+  helpCloseConfirm: {
+    marginTop: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+    backgroundColor: '#FF6B00',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  helpCloseConfirmText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
   },
 });
