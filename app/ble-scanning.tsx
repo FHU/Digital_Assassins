@@ -435,24 +435,6 @@ export default function BLEScanning() {
     }
   }, [deviceId]);
 
-  // Countdown effect - starts when both lobbyId and targetPlayerId are set
-  useEffect(() => {
-    // Only start countdown if game has loaded and player has a target
-    if (!lobbyId || !targetPlayerId) return;
-
-    // Set a small delay to let UI settle, then show countdown
-    const countdownStartTimer = setTimeout(() => {
-      console.log('🎮 Starting game countdown...');
-      setShowCountdown(true);
-      setCountdownValue(3);
-
-      // Animate the first number
-      animateCountdownNumber();
-    }, 500);
-
-    return () => clearTimeout(countdownStartTimer);
-  }, [lobbyId, targetPlayerId]);
-
   // Countdown animation and tick logic
   const animateCountdownNumber = () => {
     let current = 3;
@@ -491,7 +473,25 @@ export default function BLEScanning() {
         ]).start();
       }
     }, 1000);
-  }
+  };
+
+  // Countdown effect - starts when both lobbyId and targetPlayerId are set
+  useEffect(() => {
+    // Only start countdown if game has loaded and player has a target
+    if (!lobbyId || !targetPlayerId) return;
+
+    // Set a small delay to let UI settle, then show countdown
+    const countdownStartTimer = setTimeout(() => {
+      console.log('🎮 Starting game countdown...');
+      setShowCountdown(true);
+      setCountdownValue(3);
+
+      // Animate the first number
+      animateCountdownNumber();
+    }, 500);
+
+    return () => clearTimeout(countdownStartTimer);
+  }, [lobbyId, targetPlayerId])
 
   // Listen for game end notification from host
   useEffect(() => {
